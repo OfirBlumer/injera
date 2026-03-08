@@ -1,0 +1,290 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║                   🎮 INJERA BOARD GAME - AI SYSTEM                          ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                             WHAT YOU CAN DO NOW                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ✅ Play Human vs Beginner AI                                              │
+│  ✅ Watch Beginner AI vs Beginner AI                                       │
+│  ✅ Get AI move suggestions via API                                        │
+│  ✅ See all legal moves for any game state                                 │
+│  ✅ Test the system with automated tests                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              SYSTEM ARCHITECTURE                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                     WEB BROWSER                             │
+    │                                                             │
+    │  ┌───────────────────────────────────────────────────┐     │
+    │  │         injera_game.html (Your Game)              │     │
+    │  │                                                   │     │
+    │  │  • Shows hexagonal board                         │     │
+    │  │  • Handles human player input                    │     │
+    │  │  • Displays game state                           │     │
+    │  │  • Calls AI when needed                          │     │
+    │  └───────────────────────────────────────────────────┘     │
+    │                         │                                   │
+    └─────────────────────────┼───────────────────────────────────┘
+                              │
+                              │ HTTP POST /ai_move
+                              │ (sends game state)
+                              │
+                              ↓
+    ┌─────────────────────────────────────────────────────────────┐
+    │              PYTHON AI SERVER (localhost:5000)              │
+    │                                                             │
+    │  ┌───────────────────────────────────────────────────┐     │
+    │  │                  server.py                        │     │
+    │  │                                                   │     │
+    │  │  • Receives game state from browser              │     │
+    │  │  • Routes to appropriate AI                      │     │
+    │  │  • Returns chosen action                         │     │
+    │  └─────────────────┬─────────────────────────────────┘     │
+    │                    │                                        │
+    │                    ↓                                        │
+    │  ┌───────────────────────────────────────────────────┐     │
+    │  │            AI Players (ai/)                       │     │
+    │  │                                                   │     │
+    │  │  ┌─────────────────────────────────┐             │     │
+    │  │  │  beginner_ai.py                │             │     │
+    │  │  │  • Makes random moves          │             │     │
+    │  │  │  • Prefers eating dishes       │             │     │
+    │  │  └─────────────────────────────────┘             │     │
+    │  │                                                   │     │
+    │  │  ┌─────────────────────────────────┐             │     │
+    │  │  │  intermediate_ai.py (TODO)     │             │     │
+    │  │  │  • Heuristic-based strategy    │             │     │
+    │  │  └─────────────────────────────────┘             │     │
+    │  │                                                   │     │
+    │  │  ┌─────────────────────────────────┐             │     │
+    │  │  │  advanced_ai.py (TODO)         │             │     │
+    │  │  │  • Tree search planning        │             │     │
+    │  │  └─────────────────────────────────┘             │     │
+    │  └─────────────────┬─────────────────────────────────┘     │
+    │                    │                                        │
+    │                    ↓                                        │
+    │  ┌───────────────────────────────────────────────────┐     │
+    │  │         Game Engine (engine/)                     │     │
+    │  │                                                   │     │
+    │  │  ┌─────────────────────────────────┐             │     │
+    │  │  │  action_generator.py           │             │     │
+    │  │  │  • Finds all legal moves       │             │     │
+    │  │  │  • Validates game rules        │             │     │
+    │  │  └─────────────────────────────────┘             │     │
+    │  │                                                   │     │
+    │  │  ┌─────────────────────────────────┐             │     │
+    │  │  │  game_state.py                 │             │     │
+    │  │  │  • Represents game state       │             │     │
+    │  │  │  • Serializes to/from JSON     │             │     │
+    │  │  └─────────────────────────────────┘             │     │
+    │  └───────────────────────────────────────────────────┘     │
+    │                                                             │
+    └─────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                             HOW TO USE                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  STEP 1: Install Dependencies
+  ────────────────────────────
+  $ cd injera_ai
+  $ pip install -r requirements.txt
+
+
+  STEP 2: Test the System
+  ────────────────────────
+  $ python test_ai.py
+  
+  Expected output:
+    ✅ ALL TESTS PASSED!
+
+
+  STEP 3: Start the AI Server
+  ────────────────────────────
+  $ python server.py
+  
+  Expected output:
+    🤖 INJERA AI SERVER STARTING
+    Server will run on: http://localhost:5000
+  
+  Keep this terminal open!
+
+
+  STEP 4: Integrate with HTML
+  ────────────────────────────
+  Follow the instructions in INTEGRATION_GUIDE.md to modify your
+  injera_game.html file to call the AI server.
+
+
+  STEP 5: Play!
+  ──────────────
+  Open injera_game.html in your browser and play against the AI.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            FILE DESCRIPTIONS                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  📁 engine/
+     ├─ game_state.py          Game state representation
+     │                         • TileState, PlayerState, GameState classes
+     │                         • JSON serialization
+     │
+     └─ action_generator.py    Legal move finder
+                               • Analyzes board to find valid actions
+                               • Checks game rules
+
+  📁 ai/
+     └─ beginner_ai.py         Random AI player
+                               • Makes random legal moves
+                               • Weighted toward productive actions
+
+  🌐 server.py                 Flask web server
+                               • Endpoint: POST /ai_move
+                               • Endpoint: POST /legal_actions
+                               • Endpoint: GET /health
+
+  🧪 test_ai.py                Test suite
+                               • Tests action generator
+                               • Tests AI players
+                               • Tests serialization
+
+  📚 Documentation
+     ├─ README.md              General overview
+     ├─ INTEGRATION_GUIDE.md   How to add AI to HTML (DETAILED!)
+     ├─ SUMMARY.md             This summary
+     └─ PROJECT_OVERVIEW.txt   ASCII diagram (this file)
+
+  🚀 quick_start.py            Setup automation
+                               • Installs dependencies
+                               • Runs tests
+                               • Starts server
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          WHAT'S NEXT?                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  PHASE 1: Integration (Do This First!)
+  ──────────────────────────────────────
+  □ Read INTEGRATION_GUIDE.md
+  □ Modify injera_game.html to add AI support
+  □ Test Human vs AI gameplay
+  □ Test AI vs AI gameplay
+
+
+  PHASE 2: Better AI
+  ───────────────────
+  □ Create intermediate_ai.py with heuristics
+  □ Create advanced_ai.py with planning
+  □ Compare AI performance
+
+
+  PHASE 3: Data Collection
+  ─────────────────────────
+  □ Create simulation/runner.py
+  □ Run 1000+ games automatically
+  □ Collect statistics:
+     • First player advantage
+     • Average points per system
+     • Win rates by skill level
+     • Game length distribution
+  □ Analyze results
+
+
+  PHASE 4: Advanced Features
+  ───────────────────────────
+  □ Build expert AI using insights
+  □ Add difficulty slider
+  □ Show AI "thinking" visualization
+  □ Add replay system
+  □ Tournament mode
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           KEY CONCEPTS                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  GameState
+  ─────────
+  Complete snapshot of the game at any moment:
+  • Board tiles (dishes, hot tokens, tahini)
+  • Players (hands, scores, drinks)
+  • Deck composition
+  • Current turn
+  • Reachable tiles per player
+
+  Action
+  ──────
+  A single move a player can make:
+  • Type (eat_dish, play_drink, rotate, etc.)
+  • Target (tile coordinates)
+  • Resources used (card or empty tile)
+  • Sub-choices (which drink, which direction)
+
+  Action Generator
+  ────────────────
+  Examines game state and finds ALL legal moves:
+  • Checks reachability
+  • Validates resources
+  • Ensures rule compliance
+
+  AI Player
+  ─────────
+  Chooses one action from legal options:
+  • Beginner: Random selection
+  • Intermediate: Heuristic scoring (TODO)
+  • Advanced: Tree search (TODO)
+  • Expert: Full optimization (TODO)
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         EXAMPLE API USAGE                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  JavaScript in your HTML:
+  ────────────────────────
+
+    async function getAIMove() {
+        const response = await fetch('http://localhost:5000/ai_move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                game_state: currentGameState,
+                ai_level: 'beginner'
+            })
+        });
+        
+        const data = await response.json();
+        return data.action;  // Execute this action in your game
+    }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            SUPPORT                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Questions? Check the documentation:
+  
+  • General info ────────→ README.md
+  • HTML integration ────→ INTEGRATION_GUIDE.md  
+  • API reference ───────→ SUMMARY.md
+  • Quick start ─────────→ Run python quick_start.py
+  
+  Or review the code:
+  
+  • Game logic ──────────→ engine/game_state.py
+  • Legal moves ─────────→ engine/action_generator.py
+  • AI example ──────────→ ai/beginner_ai.py
+  • Web server ──────────→ server.py
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║                     YOU'RE READY TO START! 🚀                               ║
+║                                                                              ║
+║              Run: python quick_start.py to begin                            ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝

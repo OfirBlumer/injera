@@ -1,0 +1,48 @@
+1. "Four-by-four": 
+    +4 points for each dish you ate exactly 4 tiles from.
+    +4 points if you tasted exactly 4 dish types.
+2. "Tahini freak":
+    +1 point for each two tahini tokens you consumed.
+3. "Sesame intolerance":
+    +8 points if you consumed no tahini tokens during the game.
+4. "Tahini queen":
+    +2*(number_of_players-1) points if you consumed more tahini tokens 
+    than any other player.
+5. "Tasting menu":
+    +5 points if you tasted exactly 5 dish types.
+    +6 points if you tasted exactly 6 dish types.
+    +7 points if you tasted exactly 7 dish types.
+    These points are on top of the standard bonuses.
+6. "picky eater":
+    +21 points if you tasted exactly 3 dish types.
+7. "Some like it hot":
+    +1 for each 2 hot dish tile consumed.
+8. "Hot monster":
+    +3*(number_of_players-1) points if you consumed more hot dish tiles 
+    than any other player, including extra-hot berbere.
+9. "Berbere freak":
+    +2 points for each berbere tile consumed.
+10. "No hot for you!":
+    +4*(number_of_players-1) points if you consumed less hot dishes 
+    than any other player.
+11. "Peas please":
+    +1 point for every dish tile consumed containing peas (Shiro and Kik Alicha)
+12. "Peas prince":
+    +2*(number_of_players-1) points if you consumed more tiles with peas
+    (Shiro and Kik Alicha) than any other player.
+13. "lentils party":
+    +1 point for every dish tile consumed containing lentils (Misir Wot and Azifa).
+14. "lentils princess":
+    +2*(number_of_players-1) points if you consumed more tiles with lentils
+    (Misir Wot and Azifa) than any other player.
+15. "Savage cabbage":
+    +1 point for every dish tile consumed containing cabbage (Gomen and Tikel Gomen).
+16. "Cabbage king":
+    +2*(number_of_players-1) points if you consumed more tiles with cabbage
+    (Gomen and Tikel Gomen) than any other player.
+17: "Healthy appetite":
+    +2*(number_of_players-1) if you ate more dish tiles than any other player.
+18: "Consolation prize":
+    +4*(number_of_players-1) if you ate less dish tiles than any other player.
+19: "Delicate palate":
+    +1 for each 2 non-hot dish tile consumed.

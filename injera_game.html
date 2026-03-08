@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Injera Board Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .board-section {
+            flex: 1;
+            background: #f5e6d3;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .sidebar {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #fff8dc;
+            border-radius: 10px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .player-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .player-card.current {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            box-shadow: 0 0 20px rgba(79, 172, 254, 0.5);
+        }
+        
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .card-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 10px 0;
+        }
+        
+        .card {
+            background: #fff;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            border: 2px solid #667eea;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin: 5px 0;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .legend {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        
+        .dish-count {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .eaten-dishes {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    .player-card.ai {
+    background: linear-gradient(135deg, #FA8BFF 0%, #2BD2FF 90%, #2BFF88 100%);
+}
+
+.player-card.ai::before {
+    content: "🤖 ";
+    font-size: 20px;
+}
+
+.ai-thinking {
+    color: #667eea;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="board-section">
+            <h1>🍽️ Injera Board Game 🍽️ <span style="font-size: 16px; color: #667eea;">AI Enabled</span></h1>
+            <canvas id="gameCanvas" width="700" height="700"></canvas>
+        <div class="legend">
+            <strong>Legend:</strong><br>
+            🔥 = Hot dish (requires drink or injera) | +N = Tahini<br>
+            <strong>Light green glow</strong> = Tiles you can reach<br>
+            <strong>Scoring:</strong> Non-hot=1pt, Medium-hot=2pts, Berbere=3pts<br>
+            <strong>🤖 AI:</strong> Purple gradient = AI player | AI moves automatically<br>
+            <em style="font-size: 10px;">Server: python server.py</em>
+        </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="panel">
+                <h2>📊 Game Status</h2>
+                <div id="gameStatus"></div>
+                <button class="btn" style="background: #d32f2f;" onclick="if(confirm('Start a new game?')) location.reload()">🎮 New Game</button>
+                <button class="btn" onclick="nextTurn()">Next Turn ▶️</button>
+                <button class="btn" id="undoBtn" style="background: #555; display: none;" onclick="undoLastAction()">↩️ Undo</button>
+                <button class="btn" style="background: #8b0000;" onclick="endGameNow()">⏹️ End Game Now</button>
+                <button class="btn" onclick="testEat()">Eat Dish 🍴</button>
+                <button class="btn" onclick="eatEmptyTile()">Eat Empty Tile 🥖</button>
+                <button class="btn" onclick="playDrinkCard()">Order Drink 🥤</button>
+                <button class="btn" onclick="playRotateCard()">Play Rotate Card 🔄</button>
+                <button class="btn" onclick="drinkToken()">Drink Token 🍺</button>
+                <button class="btn" onclick="addTahini()">Add Tahini 🥫</button>
+                <button class="btn" style="background: #c0392b;" onclick="addHotSauce()">Hot Sauce 🌶️</button>
+            </div>
+            
+            <div id="playersPanel"></div>
+        </div>
+    </div>
+
+    <script>
+        // Game data
+        let boardData = [{"q": -4, "r": 0, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -4, "r": 1, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -4, "r": 2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": -4, "r": 3, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -4, "r": 4, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": -1, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": 0, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": 1, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": 2, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": 3, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -3, "r": 4, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -2, "r": -2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": -2, "r": -1, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -2, "r": 0, "dish": "Azifa", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -2, "r": 1, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": -2, "r": 2, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -2, "r": 3, "dish": "Gomen", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -2, "r": 4, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": -1, "r": -3, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -1, "r": -2, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -1, "r": -1, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": -1, "r": 0, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -1, "r": 1, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -1, "r": 2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": -1, "r": 3, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": -1, "r": 4, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": -4, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": -3, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": -2, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": -1, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": 0, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": 1, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": 2, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": 3, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 0, "r": 4, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": -4, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": -3, "dish": "Shiro", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": -2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": 1, "r": -1, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": 0, "dish": "Berbere Misir", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": 1, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": 1, "r": 2, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 1, "r": 3, "dish": "Kik Alicha", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 2, "r": -4, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": 2, "r": -3, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 2, "r": -2, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 2, "r": -1, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": false}, {"q": 2, "r": 0, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 2, "r": 1, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 2, "r": 2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": 3, "r": -4, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 3, "r": -3, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 3, "r": -2, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 3, "r": -1, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 3, "r": 0, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 3, "r": 1, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 4, "r": -4, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 4, "r": -3, "dish": "Tikel Gomen", "hot": true, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 4, "r": -2, "dish": null, "hot": false, "hotToken": false, "tahini": 0, "empty": true, "removed": false, "canEatEmpty": true}, {"q": 4, "r": -1, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}, {"q": 4, "r": 0, "dish": "Misir Wot", "hot": false, "hotToken": false, "tahini": 0, "empty": false, "removed": false, "canEatEmpty": false}];
+        let playersData = [{"name": "Player 1","position": 0,"score": 0,"handSizeModifier": 0,"baseHandSize": 4,"maxHandSize": 4,"superHotCount": 0,"superHotValue": 3,"hand": [],"eaten": [],"dishCounts": {"Gomen": 0,"Misir Wot": 0,"Shiro": 0,"Kik Alicha": 0,"Azifa": 0,"Tikel Gomen": 0,"Berbere Misir": 0},"tastedAllTypes": false,"drinks": [],"specialCards": [],"tahiniConsumed": 0,"hotDishesEaten": 0,"totalHotEaten": 0},{"name": "Player 2","position": 1,"score": 0,"handSizeModifier": 0,"baseHandSize": 4,"maxHandSize": 4,"superHotCount": 0,"superHotValue": 3,"hand": [],"eaten": [],"dishCounts": {"Gomen": 0,"Misir Wot": 0,"Shiro": 0,"Kik Alicha": 0,"Azifa": 0,"Tikel Gomen": 0,"Berbere Misir": 0},"tastedAllTypes": false,"drinks": [],"specialCards": [],"tahiniConsumed": 0,"hotDishesEaten": 0,"totalHotEaten": 0}];
+        let deckData = {"cardsRemaining": 50, "deckSize": 50, "discardSize": 0, "composition": {"Injera": 32, "Rotate": 7, "Beer": 3, "Tahini": 5, "Water": 1, "Coffee": 2}};
+        let reachableByPlayer = [[],[]];
+        let numPlayers = 2;
+        let currentPlayerIdx = 0;
+        let selectedTile = null;
+        let rotationOffset = 0; // Board rotation in degrees (0, 60, 120, 180, 240, 300)
+        let finalRoundActive = false; // Track if we're in the final round
+        let finalRoundStartPlayer = -1; // Which player ate the last dish
+        let waterRefilledThisTurn = new Array(numPlayers).fill(false); // Water refill once per turn
+        let turnCount = 0; // Total turns played (for game data export)
+        let dishEatenThisTurn = false; // Was a dish eaten during the current player's turn?
+        let noEatStreakTurns = 0; // Consecutive turns without any dish eaten
+        let previousGameState = null; // Saved state for undo (1 level)
+
+        function saveStateForUndo() {
+            previousGameState = {
+                boardData: JSON.parse(JSON.stringify(boardData)),
+                playersData: JSON.parse(JSON.stringify(playersData)),
+                currentPlayerIdx,
+                finalRoundActive,
+                finalRoundStartPlayer,
+                waterRefilledThisTurn: [...waterRefilledThisTurn],
+                turnCount,
+                dishEatenThisTurn,
+                noEatStreakTurns,
+                rotationOffset,
+                deckData: JSON.parse(JSON.stringify(deckData)),
+            };
+            document.getElementById('undoBtn').style.display = '';
+        }
+
+        function undoLastAction() {
+            if (!previousGameState) { alert('Nothing to undo.'); return; }
+            const s = previousGameState;
+            boardData = s.boardData;
+            playersData = s.playersData;
+            currentPlayerIdx = s.currentPlayerIdx;
+            finalRoundActive = s.finalRoundActive;
+            finalRoundStartPlayer = s.finalRoundStartPlayer;
+            waterRefilledThisTurn = s.waterRefilledThisTurn;
+            turnCount = s.turnCount;
+            dishEatenThisTurn = s.dishEatenThisTurn;
+            noEatStreakTurns = s.noEatStreakTurns;
+            rotationOffset = s.rotationOffset;
+            deckData = s.deckData;
+            previousGameState = null;
+            selectedTile = null;
+            document.getElementById('undoBtn').style.display = 'none';
+            updatePlayersPanel();
+            drawBoard();
+        }
+
+        // Special cards system
+        let specialCardsEnabled = false;
+        let specialCardsDealCount = 0;
+        let specialCardsKeepCount = 0;
+
+        const SPECIAL_CARDS_DECK = [
+            {
+                id: 'four_by_four',
+                name: 'Four-by-four',
+                description: '+4 per dish type with exactly 4 eaten, +4 if exactly 4 types tasted',
+                score: function(player, allPlayers) {
+                    let pts = 0;
+                    for (const count of Object.values(player.dishCounts || {})) {
+                        if (count === 4) pts += 4;
+                    }
+                    const numTypes = new Set(player.eaten).size;
+                    if (numTypes === 4) pts += 4;
+                    return pts;
+                }
+            },
+            {
+                id: 'tahini_freak',
+                name: 'Tahini freak',
+                description: '+1 per every 2 tahini tokens consumed',
+                score: function(player, allPlayers) {
+                    return Math.floor((player.tahiniConsumed || 0) / 2);
+                }
+            },
+            {
+                id: 'sesame_intolerance',
+                name: 'Sesame intolerance',
+                description: '+8 if you consumed no tahini tokens',
+                score: function(player, allPlayers) {
+                    return (player.tahiniConsumed || 0) === 0 ? 8 : 0;
+                }
+            },
+            {
+                id: 'tahini_queen',
+                name: 'Tahini queen',
+                description: '+2*(N-1) if you consumed more tahini than any other player',
+                score: function(player, allPlayers) {
+                    const mine = player.tahiniConsumed || 0;
+                    const others = allPlayers.filter(p => p !== player).map(p => p.tahiniConsumed || 0);
+                    if (mine > 0 && others.every(o => mine > o)) return 2 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'tasting_menu',
+                name: 'Tasting menu',
+                description: '+5/+6/+7 for exactly 5/6/7 types tasted (on top of standard)',
+                score: function(player, allPlayers) {
+                    const numTypes = new Set(player.eaten).size;
+                    if (numTypes === 5) return 5;
+                    if (numTypes === 6) return 6;
+                    if (numTypes === 7) return 7;
+                    return 0;
+                }
+            },
+            {
+                id: 'picky_eater',
+                name: 'Picky eater',
+                description: '+21 if you tasted exactly 3 dish types',
+                score: function(player, allPlayers) {
+                    return new Set(player.eaten).size === 3 ? 21 : 0;
+                }
+            },
+            {
+                id: 'some_like_it_hot',
+                name: 'Some like it hot',
+                description: '+1 per 2 hot dishes eaten (incl. berbere)',
+                score: function(player, allPlayers) {
+                    return Math.floor((player.totalHotEaten || 0) / 2);
+                }
+            },
+            {
+                id: 'hot_monster',
+                name: 'Hot monster',
+                description: '+3*(N-1) if you consumed more hot dishes than any other player (incl. berbere)',
+                score: function(player, allPlayers) {
+                    const mine = player.totalHotEaten || 0;
+                    const others = allPlayers.filter(p => p !== player).map(p => p.totalHotEaten || 0);
+                    if (mine > 0 && others.every(o => mine > o)) return 3 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'berbere_freak',
+                name: 'Berbere freak',
+                description: '+2 per berbere tile consumed',
+                score: function(player, allPlayers) {
+                    return 2 * (player.superHotCount || 0);
+                }
+            },
+            {
+                id: 'no_hot_for_you',
+                name: 'No hot for you!',
+                description: '+4*(N-1) if you consumed fewer hot dishes than any other player',
+                score: function(player, allPlayers) {
+                    const mine = player.totalHotEaten || 0;
+                    const others = allPlayers.filter(p => p !== player).map(p => p.totalHotEaten || 0);
+                    if (others.every(o => mine < o)) return 4 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'peas_please',
+                name: 'Peas please',
+                description: '+1 per Shiro or Kik Alicha tile eaten',
+                score: function(player, allPlayers) {
+                    return (player.dishCounts['Shiro'] || 0) + (player.dishCounts['Kik Alicha'] || 0);
+                }
+            },
+            {
+                id: 'peas_prince',
+                name: 'Peas prince',
+                description: '+2*(N-1) if you consumed more peas dishes than any other player',
+                score: function(player, allPlayers) {
+                    const mine = (player.dishCounts['Shiro'] || 0) + (player.dishCounts['Kik Alicha'] || 0);
+                    const others = allPlayers.filter(p => p !== player).map(p =>
+                        (p.dishCounts['Shiro'] || 0) + (p.dishCounts['Kik Alicha'] || 0));
+                    if (mine > 0 && others.every(o => mine > o)) return 2 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'lentils_party',
+                name: 'Lentils party',
+                description: '+1 per Misir Wot or Azifa tile eaten',
+                score: function(player, allPlayers) {
+                    return (player.dishCounts['Misir Wot'] || 0) + (player.dishCounts['Azifa'] || 0);
+                }
+            },
+            {
+                id: 'lentils_princess',
+                name: 'Lentils princess',
+                description: '+2*(N-1) if you consumed more lentil dishes than any other player',
+                score: function(player, allPlayers) {
+                    const mine = (player.dishCounts['Misir Wot'] || 0) + (player.dishCounts['Azifa'] || 0);
+                    const others = allPlayers.filter(p => p !== player).map(p =>
+                        (p.dishCounts['Misir Wot'] || 0) + (p.dishCounts['Azifa'] || 0));
+                    if (mine > 0 && others.every(o => mine > o)) return 2 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'savage_cabbage',
+                name: 'Savage cabbage',
+                description: '+1 per Gomen or Tikel Gomen tile eaten',
+                score: function(player, allPlayers) {
+                    return (player.dishCounts['Gomen'] || 0) + (player.dishCounts['Tikel Gomen'] || 0);
+                }
+            },
+            {
+                id: 'cabbage_king',
+                name: 'Cabbage king',
+                description: '+2*(N-1) if you consumed more cabbage dishes than any other player',
+                score: function(player, allPlayers) {
+                    const mine = (player.dishCounts['Gomen'] || 0) + (player.dishCounts['Tikel Gomen'] || 0);
+                    const others = allPlayers.filter(p => p !== player).map(p =>
+                        (p.dishCounts['Gomen'] || 0) + (p.dishCounts['Tikel Gomen'] || 0));
+                    if (mine > 0 && others.every(o => mine > o)) return 2 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'healthy_appetite',
+                name: 'Healthy appetite',
+                description: '+2*(N-1) if you ate more dish tiles than any other player',
+                score: function(player, allPlayers) {
+                    const mine = player.eaten.length;
+                    const others = allPlayers.filter(p => p !== player).map(p => p.eaten.length);
+                    if (mine > 0 && others.every(o => mine > o)) return 2 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'consolation_prize',
+                name: 'Consolation prize',
+                description: '+4*(N-1) if you ate fewer dish tiles than any other player',
+                score: function(player, allPlayers) {
+                    const mine = player.eaten.length;
+                    const others = allPlayers.filter(p => p !== player).map(p => p.eaten.length);
+                    if (others.every(o => mine < o)) return 4 * (allPlayers.length - 1);
+                    return 0;
+                }
+            },
+            {
+                id: 'delicate_palate',
+                name: 'Delicate palate',
+                description: '+1 per 2 non-hot dish tiles eaten',
+                score: function(player, allPlayers) {
+                    const nonHot = player.eaten.length - (player.totalHotEaten || 0);
+                    return Math.floor(nonHot / 2);
+                }
+            }
+        ];
+        
+        // Player position angles (where they sit around the board)
+        const playerPositionAngles = {
+            0: 270,  // Bottom (6 o'clock)
+            1: 90,   // Top (12 o'clock) for 2 players
+            2: 0,    // Right (3 o'clock) for 3-4 players
+            3: 180   // Left (9 o'clock) for 4 players
+        };
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hexSize = 25;
+        
+        // Dish colors
+        const dishColors = {
+            // Non-hot (cooler colors)
+            'Gomen': '#90EE90',           // Light green (collard greens)
+            'Misir Wot': '#CD5C5C',       // Indian red (red lentils)
+            'Shiro': '#FFE4B5',           // Moccasin (chickpea)
+            
+            // Medium-hot (warm colors)
+            'Kik Alicha': '#F0E68C',      // Khaki (yellow split peas)
+            'Azifa': '#DDA0DD',           // Plum (lentil salad)
+            'Tikel Gomen': '#9ACD32',     // Yellow green (cabbage) - more distinct from Gomen
+            
+            // Super-hot (intense color)
+            'Berbere Misir': '#DC143C'    // Crimson (very spicy!)
+        };
+        
+        function hexToPixel(q, r) {
+            const x = hexSize * (3/2 * q) + 350;
+            const y = hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r) + 350;
+            return {x, y};
+        }
+        
+        function drawHexagon(x, y, size, fillColor, strokeColor = 'black', lineWidth = 2) {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.PI / 3 * i;
+                const px = x + size * Math.cos(angle);
+                const py = y + size * Math.sin(angle);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+        }
+        
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Get current player's reachable tiles
+            const reachableCoords = reachableByPlayer[currentPlayerIdx];
+            const reachableSet = new Set(reachableCoords.map(c => `${c.q},${c.r}`));
+            
+            boardData.forEach(tile => {
+                // Skip removed tiles completely
+                if (tile.removed) return;
+                
+                const {x, y} = hexToPixel(tile.q, tile.r);
+                
+                let color = tile.empty ? '#FFFACD' : dishColors[tile.dish] || '#FFFFFF';
+                let stroke = tile.hot ? '#8B0000' : '#333';
+                let lineWidth = tile.hot ? 3 : 2;
+                
+                // Check if tile is reachable by current player
+                const isReachable = reachableSet.has(`${tile.q},${tile.r}`);
+                
+                // Dim unreachable tiles
+                if (!isReachable) {
+                    ctx.globalAlpha = 0.3;
+                }
+                
+                // Highlight selected tile with a gold outer ring
+                if (selectedTile && selectedTile.q === tile.q && selectedTile.r === tile.r) {
+                    drawHexagon(x, y, hexSize + 7, '#FFD700', '#FFD700', 6);
+                }
+                
+                // Draw green outline if empty tile can be eaten
+                if (tile.empty && tile.canEatEmpty && isReachable) {
+                    drawHexagon(x, y, hexSize + 5, '', '#00FF00', 3);
+                }
+                
+                // Draw blue outline if dish has adjacent EATABLE empty tile
+                if (!tile.empty && !tile.removed && isReachable) {
+                    const adjacentEatable = getAdjacentEmptyTiles(tile.q, tile.r);
+                    if (adjacentEatable.length > 0) {
+                        drawHexagon(x, y, hexSize + 5, '', '#4169E1', 2);
+                    }
+                }
+                
+                drawHexagon(x, y, hexSize, color, stroke, lineWidth);
+                
+                // Draw labels
+                if (!tile.empty) {
+                    ctx.fillStyle = 'black';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    let label = tile.dish[0];
+                    if (tile.tahini > 0) label += '+' + tile.tahini;
+                    ctx.fillText(label, x, y);
+                    
+                    const baseDishHot = tile.dish === 'Berbere Misir' ? 2 : (tile.hot ? 1 : 0);
+                    const effectiveDishHot = Math.max(0, baseDishHot + (tile.hotSauce || 0) - (tile.tahini || 0));
+                    if (effectiveDishHot > 0) {
+                        const flameCount = Math.min(6, effectiveDishHot);
+                        const flameDist = hexSize * 0.6; // inside tile, near each edge
+                        ctx.font = '9px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        for (let fi = 0; fi < flameCount; fi++) {
+                            const angle = Math.PI / 6 + Math.PI / 3 * fi;
+                            ctx.fillText('🔥', x + flameDist * Math.cos(angle), y + flameDist * Math.sin(angle));
+                        }
+                    }
+                } else {
+                    // Empty tile
+                    ctx.fillStyle = '#999';
+                    ctx.font = 'italic 9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    let emptyLabel = 'empty';
+                    if (tile.tahini > 0) {
+                        emptyLabel = `+${tile.tahini}`;
+                        ctx.fillStyle = '#D2691E';  // Brown for tahini
+                        ctx.font = 'bold 12px Arial';
+                    }
+                    ctx.fillText(emptyLabel, x, y);
+                    
+                    // Show effective hotness (hotToken + hotSauce - tahini)
+                    const isBerbereHotToken = Math.abs(tile.q) <= 1 && Math.abs(tile.r) <= 1 &&
+                                             Math.abs(tile.q + tile.r) <= 1;
+                    const baseEmptyHot = tile.hotToken ? (isBerbereHotToken ? 2 : 1) : 0;
+                    const effectiveEmptyHot = Math.max(0, baseEmptyHot + (tile.hotSauce || 0) - (tile.tahini || 0));
+                    if (effectiveEmptyHot > 0) {
+                        const flameCount = Math.min(6, effectiveEmptyHot);
+                        const flameDist = hexSize * 0.6;
+                        ctx.font = '9px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        for (let fi = 0; fi < flameCount; fi++) {
+                            const angle = Math.PI / 6 + Math.PI / 3 * fi;
+                            ctx.fillText('🔥', x + flameDist * Math.cos(angle), y + flameDist * Math.sin(angle));
+                        }
+                    }
+                }
+                
+                ctx.globalAlpha = 1.0; // Reset alpha
+            });
+            
+            // Draw player position markers
+            drawPlayerPositions();
+        }
+        
+        function getCurrentReachableTiles() {
+            // Get reachable tiles for current player, adjusted for rotation
+            // For 2 players: position 0 = index 0, position 1 = index 1
+            // Rotation doesn't change the reachable set in the current implementation
+            // (rotation would need server-side recalculation in full version)
+            const playerPos = playersData[currentPlayerIdx].position;
+            console.log('Getting reachable for player', currentPlayerIdx, 'position', playerPos);
+            console.log('Reachable array:', reachableByPlayer[playerPos]);
+            return reachableByPlayer[playerPos] || [];
+        }
+        
+        function drawPlayerPositions() {
+            const playerColors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#A78BFA', '#FB923C'];
+            const radius = 280; // Distance from center
+            
+            // Flat-top hexagon vertices at 0°, 60°, 120°, 180°, 240°, 300°
+            let playerVertices;
+            if (numPlayers === 2) {
+                playerVertices = [300, 120];  // P1: top-right, P2: bottom-left
+            } else if (numPlayers === 3) {
+                playerVertices = [300, 60, 180];  // P1: top-right, P2: bottom-right, P3: left
+            } else if (numPlayers === 4) {
+                playerVertices = [300, 0, 120, 180];  // P1: top-right, P2: right, P3: bottom-left, P4: left (symmetric pairs)
+            } else if (numPlayers === 5) {
+                playerVertices = [300, 0, 60, 120, 240];  // skip left (180)
+            } else if (numPlayers === 6) {
+                playerVertices = [300, 0, 60, 120, 180, 240];  // all vertices
+            }
+            
+            for (let i = 0; i < numPlayers; i++) {
+                // Convert angle to radians
+                const angleDeg = playerVertices[i];
+                const angle = angleDeg * Math.PI / 180;
+                const px = 350 + radius * Math.cos(angle);
+                const py = 350 + radius * Math.sin(angle);
+                
+                // Draw player marker
+                ctx.fillStyle = playerColors[i];
+                ctx.strokeStyle = i === currentPlayerIdx ? '#FFD700' : '#333';
+                ctx.lineWidth = i === currentPlayerIdx ? 4 : 2;
+                
+                ctx.beginPath();
+                ctx.arc(px, py, 20, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Draw player number
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`P${i + 1}`, px, py);
+            }
+        }
+        
+function ensureTokenCounters() {
+    // No-op: drinks counter removed (Coffee/Beer always end turn)
+}
+
+        function updatePlayersPanel() {
+            ensureTokenCounters();
+            const panel = document.getElementById('playersPanel');
+            panel.innerHTML = '';
+            
+            // Show current player first, then others
+            const sortedIndices = [currentPlayerIdx];
+            for (let i = 0; i < playersData.length; i++) {
+                if (i !== currentPlayerIdx) {
+                    sortedIndices.push(i);
+                }
+            }
+            
+            sortedIndices.forEach(idx => {
+                const player = playersData[idx];
+                const isCurrent = idx === currentPlayerIdx;
+                
+                // Determine position label based on player count
+                const positionLabels = {
+                    2: ['South', 'North'],
+                    3: ['South', 'NE', 'NW'],
+                    4: ['South', 'East', 'North', 'West'],
+                    5: ['South', 'SE', 'NE', 'NW', 'SW'],
+                    6: ['South', 'SE', 'NE', 'North', 'NW', 'SW']
+                };
+                const labels = positionLabels[numPlayers] || positionLabels[2];
+                const positionLabel = labels[player.position] || `P${player.position}`;
+                
+                const cardHTML = `
+                    <div class="player-card ${isCurrent ? 'current' : ''}">
+                        <h2>${player.name} ${isCurrent ? '👈 YOUR TURN' : ''}</h2>
+                        <div class="score">Score: ${player.score}</div>
+                        <div style="font-size: 12px; margin: 5px 0;">
+                            Hand: ${player.hand.length}/${player.maxHandSize}
+                            ${player.tahiniConsumed ? ` | 🥫×${player.tahiniConsumed}` : ''}
+                            ${(player.totalHotEaten || 0) > 0 ? ` | 🔥×${player.totalHotEaten}` : ''}
+                            ${(player.nonHotDishesEaten || 0) > 0 ? ` | 🥗×${player.nonHotDishesEaten}` : ''}
+                            ${player.tastedAllTypes ? ' | 🎉 Tasted all!' : ''}
+                        </div>
+
+                        <strong>Hand:</strong>
+                        <div class="card-list">
+                            ${player.hand.map(c => `<span class="card">${c.name}</span>`).join('')}
+                        </div>
+                        
+                        ${player.drinks.length > 0 ? `
+                            <strong>Active Drinks:</strong>
+                            <div class="card-list">
+                                ${player.drinks.map(d => `<span class="card">${d.type}: ${d.tokens}🥤</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        
+                        <div class="eaten-dishes" style="font-size: 11px;">
+                            <strong>Eaten (${player.eaten.length}):</strong><br>
+                            ${Object.entries(player.dishCounts || {}).map(([dish, count]) => {
+                                // Get abbreviation: first letter, or special cases
+                                let abbr = dish.charAt(0); // Default: first letter
+                                if (dish === 'Misir Wot') abbr = 'M';
+                                else if (dish === 'Kik Alicha') abbr = 'K';
+                                else if (dish === 'Tikel Gomen') abbr = 'T';
+                                else if (dish === 'Berbere Misir') abbr = 'B';
+
+                                return `${abbr}:${count}${count === 7 ? '✓' : ''}`;
+                            }).join(' ') || 'None'}
+                        </div>
+                        ${(specialCardsEnabled && player.specialCards && player.specialCards.length > 0 && (isCurrent || !player.isAI)) ? `
+                            <div style="font-size: 11px; margin-top: 5px; padding: 4px; background: #f8f4ff; border-radius: 4px; border: 1px solid #d4c5f0;">
+                                <strong>Secret Cards:</strong>
+                                ${player.specialCards.map(c => `<span style="display:inline-block;margin:2px;padding:2px 5px;background:#e8dff5;border-radius:3px;" title="${c.description}">${c.name}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                panel.innerHTML += cardHTML;
+            });
+        }
+        
+        function updateGameStatus() {
+            const dishesRemaining = boardData.filter(t => !t.empty).length;
+            const status = document.getElementById('gameStatus');
+            
+            // Build composition: deck + other players' hands (not current player)
+            const composition = {...deckData.composition};
+            
+            // Add cards from OTHER players' hands
+            playersData.forEach((player, idx) => {
+                if (idx !== currentPlayerIdx) {
+                    player.hand.forEach(card => {
+                        let cardType;
+                        if (card.type === 'Clean Injera') cardType = 'Injera';
+                        else if (card.name === 'Rotate Injera') cardType = 'Rotate';
+                        else if (card.name === 'Tahini') cardType = 'Tahini';
+                        else if (card.name === 'Order Coffee') cardType = 'Coffee';
+                        else if (card.name === 'Order Beer') cardType = 'Beer';
+                        else if (card.name === 'Order Water') cardType = 'Water';
+                        
+                        composition[cardType] = (composition[cardType] || 0) + 1;
+                    });
+                }
+            });
+            
+            const compItems = [];
+            if (composition.Injera) compItems.push(`${composition.Injera}×Injera`);
+            if (composition.Rotate) compItems.push(`${composition.Rotate}×Rotate`);
+            if (composition.Tahini) compItems.push(`${composition.Tahini}×Tahini`);
+            if (composition.Coffee) compItems.push(`${composition.Coffee}×Coffee`);
+            if (composition.Beer) compItems.push(`${composition.Beer}×Beer`);
+            if (composition.Water) compItems.push(`${composition.Water}×Water`);
+            const compString = compItems.join(', ') || 'Empty';
+            
+            const totalUnknown = Object.values(composition).reduce((a, b) => a + b, 0);
+            
+            status.innerHTML = `
+                <div class="dish-count">
+                    <span>Dishes Remaining:</span>
+                    <strong>${dishesRemaining}</strong>
+                </div>
+                <div class="dish-count">
+                    <span>Unknown Cards:</span>
+                    <strong>${totalUnknown} total</strong>
+                </div>
+                <div class="dish-count" style="font-size: 11px;">
+                    <span>Deck + Others:</span>
+                    <strong>${compString}</strong>
+                </div>
+                <div class="dish-count">
+                    <span>Current Turn:</span>
+                    <strong>${playersData[currentPlayerIdx].name}</strong>
+                </div>
+            `;
+        }
+        
+        function drawCards(player, count = null) {
+            // If count is not specified, draw to fill hand
+            const cardsToDraw = count !== null ? count : (player.maxHandSize - player.hand.length);
+            
+            if (cardsToDraw <= 0) {
+                return 0; // Hand already full or no cards to draw
+            }
+            
+            let cardsDrawn = 0;
+            
+            // Draw cards one at a time, reshuffling if needed mid-draw
+            for (let i = 0; i < cardsToDraw; i++) {
+                // Calculate total cards available in current composition
+                const total = Object.values(deckData.composition).reduce((a, b) => a + b, 0);
+                
+                // Check if deck needs reshuffling (composition is empty)
+                if (total === 0) {
+                    deckData.composition = {
+                        'Injera': 30,
+                        'Rotate': 10,
+                        'Tahini': 6,
+                        'Coffee': 3,
+                        'Beer': 3,
+                        'Water': 3,
+                        'HotSauce': 5
+                    };
+                    deckData.cardsRemaining = 60;
+                    deckData.deckSize = 60;
+                    console.log('DECK RESHUFFLED! Starting with fresh 60 cards.');
+                }
+                
+                // Recalculate total after potential reshuffle
+                const totalAfterReshuffle = Object.values(deckData.composition).reduce((a, b) => a + b, 0);
+                
+                if (totalAfterReshuffle === 0) {
+                    // No cards left even after reshuffle attempt (shouldn't happen with infinite reshuffles)
+                    console.log('WARNING: No cards available even after reshuffle!');
+                    break;
+                }
+                
+                // Weighted random based on actual deck composition
+                const rand = Math.random() * totalAfterReshuffle;
+                let cumulative = 0;
+                let drawnType = null;
+                
+                for (const [cardType, count] of Object.entries(deckData.composition)) {
+                    cumulative += count;
+                    if (rand < cumulative) {
+                        drawnType = cardType;
+                        break;
+                    }
+                }
+                
+                // Create card based on type
+                let newCard;
+                if (drawnType === 'Injera') {
+                    newCard = {type: 'Clean Injera', name: 'Clean Injera'};
+                } else if (drawnType === 'Rotate') {
+                    newCard = {type: 'Rotate', name: 'Rotate Injera'};
+                } else if (drawnType === 'Tahini') {
+                    newCard = {type: 'Tahini', name: 'Tahini'};
+                } else if (drawnType === 'Coffee') {
+                    newCard = {type: 'Drink', name: 'Order Coffee'};
+                } else if (drawnType === 'Beer') {
+                    newCard = {type: 'Drink', name: 'Order Beer'};
+                } else if (drawnType === 'Water') {
+                    newCard = {type: 'Drink', name: 'Order Water'};
+                } else if (drawnType === 'HotSauce') {
+                    newCard = {type: 'Hot Sauce', name: 'Add Hot Sauce'};
+                }
+
+                player.hand.push(newCard);
+                player.cardsDealt = player.cardsDealt || {};
+                player.cardsDealt[drawnType] = (player.cardsDealt[drawnType] || 0) + 1;
+
+                // Update deck composition
+                deckData.composition[drawnType]--;
+                if (deckData.composition[drawnType] === 0) {
+                    delete deckData.composition[drawnType];
+                }
+                deckData.cardsRemaining--;
+                deckData.deckSize--;
+                cardsDrawn++;
+            }
+            
+            return cardsDrawn;
+        }
+        
+        // Shuffle array in place (Fisher-Yates)
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+        
+        // Randomize initial hands by shuffling a fresh deck
+        function randomizeInitialState() {
+            // Create a fresh deck
+            const freshDeck = [];
+            for (let i = 0; i < 30; i++) freshDeck.push({type: 'Clean Injera', name: 'Clean Injera'});
+            for (let i = 0; i < 10; i++) freshDeck.push({type: 'Rotate', name: 'Rotate Injera'});
+            for (let i = 0; i < 6; i++) freshDeck.push({type: 'Tahini', name: 'Tahini'});
+            for (let i = 0; i < 3; i++) freshDeck.push({type: 'Drink', name: 'Order Coffee'});
+            for (let i = 0; i < 3; i++) freshDeck.push({type: 'Drink', name: 'Order Beer'});
+            for (let i = 0; i < 3; i++) freshDeck.push({type: 'Drink', name: 'Order Water'});
+            for (let i = 0; i < 5; i++) freshDeck.push({type: 'Hot Sauce', name: 'Add Hot Sauce'});
+            
+            shuffleArray(freshDeck);
+            
+            // Deal cards to players (first player gets one fewer card)
+            playersData.forEach((player, idx) => {
+                player.hand = [];
+                const dealCount = player.maxHandSize - (idx === 0 ? 1 : 0);
+                for (let i = 0; i < dealCount; i++) {
+                    if (freshDeck.length > 0) {
+                        player.hand.push(freshDeck.pop());
+                    }
+                }
+            });
+            
+            // Update deck composition based on remaining cards
+            deckData.composition = {Injera: 0, Rotate: 0, Tahini: 0, Coffee: 0, Beer: 0, Water: 0, HotSauce: 0};
+            freshDeck.forEach(card => {
+                if (card.type === 'Clean Injera') deckData.composition.Injera++;
+                else if (card.name === 'Rotate Injera') deckData.composition.Rotate++;
+                else if (card.name === 'Tahini') deckData.composition.Tahini++;
+                else if (card.name === 'Order Coffee') deckData.composition.Coffee++;
+                else if (card.name === 'Order Beer') deckData.composition.Beer++;
+                else if (card.name === 'Order Water') deckData.composition.Water++;
+                else if (card.name === 'Add Hot Sauce') deckData.composition.HotSauce++;
+            });
+            deckData.cardsRemaining = freshDeck.length;
+            deckData.deckSize = freshDeck.length;
+        }
+        
+        function calculateFinalScores() {
+            // Calculate variety bonus: 0-4 types = 0, 5 types = 5, 6 types = 12, 7 types = 21
+            // Calculate completion bonuses: 5 tiles = +5, 6 tiles = +10, 7 tiles = +15 (for each dish type)
+            const results = playersData.map(player => {
+                const uniqueDishTypes = new Set(player.eaten);
+                const numTypes = uniqueDishTypes.size;
+                let varietyBonus = 0;
+                if (numTypes === 5) varietyBonus = 5;
+                else if (numTypes === 6) varietyBonus = 12;
+                else if (numTypes === 7) varietyBonus = 21;
+                
+                // Calculate completion bonuses for each dish type
+                let completionBonus = 0;
+                const completionDetails = [];
+                if (player.dishCounts) {
+                    for (const [dishName, count] of Object.entries(player.dishCounts)) {
+                        if (count === 5) {
+                            completionBonus += 5;
+                            completionDetails.push(`${dishName} (5): +5`);
+                        } else if (count === 6) {
+                            completionBonus += 10;
+                            completionDetails.push(`${dishName} (6): +10`);
+                        } else if (count === 7) {
+                            completionBonus += 15;
+                            completionDetails.push(`${dishName} (7): +15`);
+                        }
+                    }
+                }
+                
+                // Calculate special card bonuses
+                let specialCardBonus = 0;
+                const specialCardDetails = [];
+                if (specialCardsEnabled && player.specialCards) {
+                    player.specialCards.forEach(card => {
+                        const cardDef = SPECIAL_CARDS_DECK.find(c => c.id === card.id);
+                        if (cardDef) {
+                            const pts = cardDef.score(player, playersData);
+                            specialCardBonus += pts;
+                            specialCardDetails.push({name: card.name, points: pts});
+                        }
+                    });
+                }
+
+                const finalScore = player.score + varietyBonus + completionBonus + specialCardBonus;
+                return {
+                    name: player.name,
+                    score: player.score,
+                    varietyBonus: varietyBonus,
+                    completionBonus: completionBonus,
+                    completionDetails: completionDetails,
+                    specialCardBonus: specialCardBonus,
+                    specialCardDetails: specialCardDetails,
+                    finalScore: finalScore,
+                    dishTypes: uniqueDishTypes.size
+                };
+            });
+            
+            return results;
+        }
+        
+        function saveGameData(results) {
+            results.forEach((r, idx) => { r.rank = idx + 1; });
+            const ts = new Date().toISOString().replace(/[-T:]/g, '').slice(0, 13);
+            const hasAI = playersData.some(p => p.isAI);
+            const mode = hasAI ? 'n' : 'h';
+            const playerStats = playersData.map((player, idx) => {
+                const r = results.find(r => r.name === player.name) || {};
+                const dishesEaten = {};
+                (player.eaten || []).forEach(d => { dishesEaten[d] = (dishesEaten[d] || 0) + 1; });
+                return {
+                    player_idx: idx,
+                    checkpoint: player.isAI ? 'neural_ai/models/checkpoint_latest.pt' : 'human',
+                    rank: r.rank || idx + 1,
+                    final_score: r.finalScore || player.score,
+                    special_card_bonus: r.specialCardBonus || 0,
+                    variety_bonus: r.varietyBonus || 0,
+                    tahini_consumed: player.tahiniConsumed || 0,
+                    drink_cards_played: player.drinkCardsPlayed || 0,
+                    rotate_cards_played: player.rotateCardsPlayed || 0,
+                    tahini_cards_played: player.tahiniCardsPlayed || 0,
+                    drink_tokens_consumed: player.drinkTokensConsumed || {},
+                    dishes_eaten: dishesEaten,
+                    completion_bonuses: (r.completionDetails || []).map(d => d.split(' (')[0]),
+                    cards_dealt: player.cardsDealt || {},
+                    special_cards_received: (player.specialCards || []).map(c => c.id || c),
+                };
+            });
+            const gameData = {
+                config: {
+                    games: 1, players: playersData.length,
+                    checkpoints: playersData.map(p => p.isAI ? 'neural_ai/models/checkpoint_latest.pt' : 'human'),
+                    deterministic: false,
+                    special_cards: specialCardsEnabled ? specialCardsDealCount : 0,
+                },
+                games: [{ game: 1, turns: turnCount, truncated: false, players: playerStats }]
+            };
+            fetch('http://localhost:5000/save_game', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(gameData)
+            }).then(r => r.json()).then(r => {
+                console.log('Game saved to:', r.saved);
+            }).catch(e => {
+                console.warn('Could not save to server, downloading locally:', e);
+                const blob = new Blob([JSON.stringify(gameData, null, 2)], {type: 'application/json'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `game_${playersData.length}p_${ts}_${mode}.json`;
+                a.click();
+            });
+        }
+
+        function endGameNow() {
+            if (!confirm('End the game now and calculate final scores?')) {
+                return;
+            }
+            
+            const results = calculateFinalScores();
+            results.sort((a, b) => b.finalScore - a.finalScore);
+            
+            let message = '🎉 GAME OVER! 🎉\n\n';
+            message += 'FINAL SCORES:\n';
+            message += '═══════════════════\n\n';
+            
+            results.forEach((r, idx) => {
+                message += formatPlayerScore(r, idx);
+            });
+
+            alert(message);
+            saveGameData(results);
+            if (typeof recordingAutoStop === 'function') recordingAutoStop();
+        }
+
+        function formatPlayerScore(r, idx) {
+            let msg = `${idx + 1}. ${r.name}: ${r.finalScore} points\n`;
+            msg += `   Base score: ${r.score}\n`;
+            msg += `   Variety bonus: +${r.varietyBonus} (${r.dishTypes} unique dish types)\n`;
+            if (r.completionBonus > 0) {
+                msg += `   Completion bonus: +${r.completionBonus} (${r.completionDetails.join(', ')})\n`;
+            }
+            if (r.specialCardBonus > 0 || (r.specialCardDetails && r.specialCardDetails.length > 0)) {
+                msg += `   Special cards: +${r.specialCardBonus}\n`;
+                r.specialCardDetails.forEach(sc => {
+                    msg += `      ${sc.name}: +${sc.points}\n`;
+                });
+            }
+            msg += `\n`;
+            return msg;
+        }
+
+        function nextTurn() {
+            saveStateForUndo();
+            turnCount++;
+            const dishesRemaining = boardData.filter(t => !t.empty && !t.removed).length;
+
+            // Refill hand for the player who just ended their turn.
+            // Beer penalty (if any) reduces the target by 1 this once.
+            const endingPlayer = playersData[currentPlayerIdx];
+            const penalty = endingPlayer.pendingBeerPenalty || 0;
+            endingPlayer.pendingBeerPenalty = 0;
+            const refillTarget = endingPlayer.maxHandSize - penalty;
+            const refillNeeded = refillTarget - endingPlayer.hand.length;
+            if (refillNeeded > 0) drawCards(endingPlayer, refillNeeded);
+
+            // Check for stalemate: two full rounds (2 × numPlayers turns) without any dish eaten
+            // Round starts at the first player who didn't eat, so we count consecutive no-eat turns
+            if (!finalRoundActive) {
+                if (dishEatenThisTurn) {
+                    noEatStreakTurns = 0;
+                } else {
+                    noEatStreakTurns++;
+                    if (noEatStreakTurns >= playersData.length) {
+                        const results = calculateFinalScores();
+                        results.sort((a, b) => b.finalScore - a.finalScore);
+                        let message = '🎉 GAME OVER! No dishes were eaten for a full round! 🎉\n\n';
+                        message += 'FINAL SCORES:\n';
+                        message += '═══════════════════\n\n';
+                        results.forEach((r, idx) => { message += formatPlayerScore(r, idx); });
+                        alert(message);
+                        saveGameData(results);
+                        if (typeof recordingAutoStop === 'function') recordingAutoStop();
+                        return;
+                    }
+                }
+            }
+            dishEatenThisTurn = false;
+
+            // Move to next player
+            currentPlayerIdx = (currentPlayerIdx + 1) % playersData.length;
+            waterRefilledThisTurn[currentPlayerIdx] = false; // Reset water refill flag
+            const currentPlayer = playersData[currentPlayerIdx];
+
+            // Check if we're in final round and have completed it
+            if (finalRoundActive && currentPlayerIdx === finalRoundStartPlayer) {
+                // Final round complete - end game
+                const results = calculateFinalScores();
+                results.sort((a, b) => b.finalScore - a.finalScore);
+
+                let message = '🎉 GAME OVER! Final round complete! 🎉\n\n';
+                message += 'FINAL SCORES:\n';
+                message += '═══════════════════\n\n';
+
+                results.forEach((r, idx) => {
+                    message += formatPlayerScore(r, idx);
+                });
+
+                alert(message);
+                saveGameData(results);
+                if (typeof recordingAutoStop === 'function') recordingAutoStop();
+                return;
+            }
+
+            // New player's turn starts with their existing hand (filled at end of previous turn)
+            const drawn = 0; // No draw at start of turn anymore
+            
+            const finalRoundMsg = finalRoundActive ? ' [FINAL ROUND]' : '';
+            {
+                alert(`${currentPlayer.name}'s turn!${finalRoundMsg}\nHand: ${currentPlayer.hand.length} cards.`);
+            }
+            
+            updatePlayersPanel();
+            updateGameStatus();
+            drawBoard(); // Redraw to show new player's reachable tiles
+            handleAITurnIfNeeded();
+        }
+        
+        // Custom modal for selecting options
+        function showSelectionModal(title, options) {
+            return new Promise((resolve) => {
+                // Create modal overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.7);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                `;
+                
+                // Create modal box
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    background: white;
+                    padding: 30px;
+                    border-radius: 15px;
+                    max-width: 400px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                `;
+                
+                // Title
+                const titleEl = document.createElement('h2');
+                titleEl.textContent = title;
+                titleEl.style.cssText = 'margin: 0 0 20px 0; color: #667eea;';
+                modal.appendChild(titleEl);
+                
+                // Options
+                options.forEach((option, idx) => {
+                    const btn = document.createElement('button');
+                    btn.textContent = option;
+                    btn.style.cssText = `
+                        display: block;
+                        width: 100%;
+                        padding: 12px;
+                        margin: 8px 0;
+                        background: #667eea;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        text-align: left;
+                    `;
+                    btn.onmouseover = () => btn.style.background = '#5568d3';
+                    btn.onmouseout = () => btn.style.background = '#667eea';
+                    btn.onclick = () => {
+                        document.body.removeChild(overlay);
+                        resolve(idx);
+                    };
+                    modal.appendChild(btn);
+                });
+                
+                // Cancel button
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.style.cssText = `
+                    display: block;
+                    width: 100%;
+                    padding: 12px;
+                    margin: 15px 0 0 0;
+                    background: #ccc;
+                    color: #333;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-size: 14px;
+                `;
+                cancelBtn.onmouseover = () => cancelBtn.style.background = '#bbb';
+                cancelBtn.onmouseout = () => cancelBtn.style.background = '#ccc';
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(overlay);
+                    resolve(null);
+                };
+                modal.appendChild(cancelBtn);
+                
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+            });
+        }
+
+        /**
+         * Handle drink finishing - apply effects and check if turn should end
+         * Returns true if turn should end (Coffee/Beer finished), false otherwise
+         */
+        function handleDrinkFinished(player, drinkType) {
+            let effectMessage = '';
+
+            if (drinkType === 'Coffee') {
+                // Coffee: refill hand to max_hand_size + 1 immediately (one-time, not permanent), ALWAYS ends turn
+                const target = player.maxHandSize + 1;
+                const toDraw = target - player.hand.length;
+                if (toDraw > 0) drawCards(player, toDraw);
+                effectMessage = ` - Coffee finished! Hand refilled to ${player.hand.length} cards. Turn ends!`;
+                return {shouldEndTurn: true, message: effectMessage};
+            } else if (drinkType === 'Beer') {
+                // Beer: next end-of-turn refill is to hand_size - 1 (one-time, not permanent), ALWAYS ends turn
+                player.pendingBeerPenalty = (player.pendingBeerPenalty || 0) + 1;
+                effectMessage = ` - Beer finished! Next refill -1 card. Turn ends!`;
+                return {shouldEndTurn: true, message: effectMessage};
+            } else if (drinkType === 'Water') {
+                if (!waterRefilledThisTurn[currentPlayerIdx]) {
+                    // First Water this turn: refill hand
+                    waterRefilledThisTurn[currentPlayerIdx] = true;
+                    const cardsNeeded = player.maxHandSize - player.hand.length;
+                    if (cardsNeeded > 0) {
+                        const drawn = drawCards(player, cardsNeeded);
+                        effectMessage = ` - Water finished! Refilled hand! Drew ${drawn} cards`;
+                    } else {
+                        effectMessage = ` - Water finished! Hand was already full`;
+                    }
+                    return {shouldEndTurn: false, message: effectMessage};
+                } else {
+                    // Second+ Water this turn: end turn, no refill
+                    effectMessage = ` - Second Water finished! Turn ends!`;
+                    return {shouldEndTurn: true, message: effectMessage};
+                }
+            }
+
+            return {shouldEndTurn: false, message: effectMessage};
+        }
+
+        async function testEat() {
+            saveStateForUndo();
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Check if a tile is selected
+            if (!selectedTile) {
+                alert('Please select a tile first by clicking on it!');
+                return;
+            }
+            
+            // Require discarding a card to eat
+            if (currentPlayer.hand.length === 0) {
+                alert('You need at least 1 card in hand to eat!');
+                return;
+            }
+            
+            // Check if tile is reachable
+            const currentReachable = getCurrentReachableTiles();
+            const isReachable = currentReachable.some(c => c.q === selectedTile.q && c.r === selectedTile.r);
+            if (!isReachable) {
+                alert('You cannot reach this tile! It is outside your reachable area (shown with light green glow).');
+                return;
+            }
+            
+            // Check if it's removed
+            if (selectedTile.removed) {
+                alert('This tile has been removed from the board!');
+                return;
+            }
+            
+            // Check if the selected tile has a dish
+            if (selectedTile.empty || !selectedTile.dish) {
+                alert('This tile is empty - use "Eat Empty Tile" to remove it from the board!');
+                return;
+            }
+            
+            // Check if it's a hot dish - need drink/injera/adjacent tahini to handle hotness
+            // Use effective hotness (tahini on dish tile reduces, hot sauce increases)
+            const baseDishHotCheck = selectedTile.hot ? 1 : 0;
+            const effectiveDishHotCheck = Math.max(0, baseDishHotCheck + (selectedTile.hotSauce || 0) - (selectedTile.tahini || 0));
+            if (effectiveDishHotCheck > 0) {
+                const activeDrinks = currentPlayer.drinks.filter(d => d.tokens > 0);
+                const injeraCards = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+                // Adjacent empty tiles with excess tahini (beyond their own hotness) can also handle dish hotness
+                const adjacentTilesForCheck = getAdjacentEmptyTiles(selectedTile.q, selectedTile.r);
+                const hasAdjacentExcessTahini = adjacentTilesForCheck.some(t => {
+                    const isBerbereT = Math.abs(t.q) <= 1 && Math.abs(t.r) <= 1 && Math.abs(t.q + t.r) <= 1;
+                    const tBaseHot = t.hotToken ? (isBerbereT ? 2 : 1) : 0;
+                    const excess = Math.max(0, (t.tahini || 0) - tBaseHot - (t.hotSauce || 0));
+                    return excess >= effectiveDishHotCheck;
+                });
+                if (activeDrinks.length === 0 && injeraCards.length === 0 && !hasAdjacentExcessTahini) {
+                    alert('This is a hot dish! You need either:\n- An active drink (with tokens), OR\n- An Injera card, OR\n- An adjacent empty tile with tahini');
+                    return;
+                }
+            }
+            
+            // Check if player can eat this dish
+            // Need either: (1) Injera card, OR (2) Adjacent empty tile
+            const injeraCards = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+            const adjacentEmptyTiles = getAdjacentEmptyTiles(selectedTile.q, selectedTile.r);
+            
+            console.log('Injera cards:', injeraCards.length);
+            console.log('Adjacent eatable empty tiles:', adjacentEmptyTiles.length);
+            console.log('Adjacent tiles detail:', adjacentEmptyTiles);
+            
+            if (injeraCards.length === 0 && adjacentEmptyTiles.length === 0) {
+                alert('Cannot eat this dish! You need either:\n- An Injera card in your hand, OR\n- An adjacent eatable empty tile (with green outline)');
+                return;
+            }
+            
+            // STEP 1: DISCARD A CARD FIRST (original order)
+            let discardedCard;
+            if (currentPlayer.hand.length === 1) {
+                // Only one card, discard it
+                discardedCard = currentPlayer.hand.pop();
+            } else {
+                const allSame = currentPlayer.hand.every(c => c.name === currentPlayer.hand[0].name);
+                if (allSame) {
+                    discardedCard = currentPlayer.hand.splice(0, 1)[0];
+                } else {
+                    // Deduplicate: show each unique card name once
+                    const seen = new Set();
+                    const uniqueOptions = [];
+                    const uniqueIndices = [];
+                    currentPlayer.hand.forEach((c, i) => {
+                        if (!seen.has(c.name)) {
+                            seen.add(c.name);
+                            uniqueOptions.push(c.name);
+                            uniqueIndices.push(i);
+                        }
+                    });
+                    const choice = await showSelectionModal('Choose a card to discard:', uniqueOptions);
+                    if (choice === null) return;
+                    discardedCard = currentPlayer.hand.splice(uniqueIndices[choice], 1)[0];
+                }
+            }
+            const discardMessage = `Discarded ${discardedCard.name}`;
+            
+            // STEP 2: Now choose resource (injera card or empty tile)
+            // Build options list
+            let options = [];
+            let optionTypes = [];
+            
+            // Add injera card option (all injera cards are identical — one option suffices)
+            const remainingInjeraCards = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+            if (remainingInjeraCards.length > 0) {
+                options.push('Injera Card');
+                optionTypes.push({type: 'card', index: 0});
+            }
+            
+            // Helper function to get direction label from hex coordinates
+            function getDirectionLabel(fromQ, fromR, toQ, toR) {
+                const dq = toQ - fromQ;
+                const dr = toR - fromR;
+                
+                // Hex direction mapping (in axial coordinates)
+                if (dq === 1 && dr === 0) return '↘';
+                if (dq === 1 && dr === -1) return '↗';
+                if (dq === 0 && dr === -1) return '↑';
+                if (dq === -1 && dr === 0) return '↖';
+                if (dq === -1 && dr === 1) return '↙';
+                if (dq === 0 && dr === 1) return '↓';
+                
+                return `(${toQ}, ${toR})`; // Fallback to coordinates
+            }
+            
+            // Add adjacent empty tile options
+            adjacentEmptyTiles.forEach((tile, idx) => {
+                const direction = getDirectionLabel(selectedTile.q, selectedTile.r, tile.q, tile.r);
+                const tahiniLabel = tile.tahini > 0 ? ` +${tile.tahini}` : '';
+                const isTileExtraHot = Math.abs(tile.q) <= 1 && Math.abs(tile.r) <= 1 && Math.abs(tile.q + tile.r) <= 1;
+                const baseTileHot = tile.hotToken ? (isTileExtraHot ? 2 : 1) : 0;
+                const effectiveHot = Math.max(0, baseTileHot + (tile.hotSauce || 0) - (tile.tahini || 0));
+                const hotLabel = effectiveHot > 0 ? ' ' + '🔥'.repeat(effectiveHot) : '';
+                options.push(`Empty Tile ${direction}${tahiniLabel}${hotLabel}`);
+                optionTypes.push({type: 'tile', tile: tile});
+            });
+            
+            // If only one option, or all options are identical injera cards, use first automatically
+            let selectedOption = 0;
+            const allInjeraOptions = optionTypes.length > 0 && optionTypes.every(o => o.type === 'card');
+            if (options.length > 1 && !allInjeraOptions) {
+                console.log('Multiple options available:', options);
+
+                // Create custom modal for selection
+                selectedOption = await showSelectionModal(
+                    'Choose how to eat this dish:',
+                    options
+                );
+                
+                console.log('User selected option:', selectedOption);
+                
+                if (selectedOption === null) {
+                    // User cancelled - restore the discarded card
+                    console.log('User cancelled selection');
+                    currentPlayer.hand.push(discardedCard);
+                    alert('Cancelled! Card returned to hand.');
+                    return;
+                }
+            } else {
+                console.log('Only one option, using automatically:', options[0]);
+            }
+            
+            console.log('Proceeding with option:', optionTypes[selectedOption]);
+            
+            const chosen = optionTypes[selectedOption];
+            
+            // PRE-CHECK: Will hot handling succeed? Calculate requirements first
+            const dishName = selectedTile.dish;
+            const wasHot = selectedTile.hot;
+            const isBerbere = dishName === 'Berbere Misir';
+            const baseDishHot = wasHot ? (isBerbere ? 2 : 1) : 0;
+            let needsHotDish = Math.max(0, baseDishHot + (selectedTile.hotSauce || 0) - (selectedTile.tahini || 0));
+
+            let needsHotTile = 0;
+            let usedEmptyTile = null;
+            if (chosen.type === 'tile') {
+                usedEmptyTile = chosen.tile;
+                const isBerbereEmptyTile = Math.abs(usedEmptyTile.q) <= 1 && Math.abs(usedEmptyTile.r) <= 1 &&
+                                        Math.abs(usedEmptyTile.q + usedEmptyTile.r) <= 1;
+                const baseEmptyHot = usedEmptyTile.hotToken ? (isBerbereEmptyTile ? 2 : 1) : 0;
+                needsHotTile = Math.max(0, baseEmptyHot + (usedEmptyTile.hotSauce || 0) - (usedEmptyTile.tahini || 0));
+                // Excess tahini on the eating tile (beyond its own hotness) handles the dish's hotness
+                const tileHotnessToAbsorb = baseEmptyHot + (usedEmptyTile.hotSauce || 0);
+                const excessTahini = Math.max(0, (usedEmptyTile.tahini || 0) - tileHotnessToAbsorb);
+                needsHotDish = Math.max(0, needsHotDish - excessTahini);
+            }
+            
+            const totalHotHandling = needsHotDish + needsHotTile;
+            
+            // NOW check if player has enough resources for hot handling (AFTER discarding!)
+            if (totalHotHandling > 0) {
+                const availableDrinks = currentPlayer.drinks.filter(d => d.tokens > 0).reduce((sum, d) => sum + d.tokens, 0);
+                let availableInjera = currentPlayer.hand.filter(c => c.type === 'Clean Injera').length;
+
+                // IMPORTANT: If eating with an injera card, that injera is NOT available for hot handling!
+                if (chosen.type === 'card') {
+                    availableInjera = Math.max(0, availableInjera - 1);
+                }
+
+                const totalHotResources = availableDrinks + availableInjera;
+
+                if (totalHotResources < totalHotHandling) {
+                    // Not enough resources! Restore the discarded card
+                    currentPlayer.hand.push(discardedCard);
+                    alert(`Not enough resources for hot handling! Need ${totalHotHandling}, have ${totalHotResources} (drinks: ${availableDrinks}, injera: ${availableInjera})\n\nCard returned to hand.`);
+                    return;
+                }
+            }
+            
+            // Execute the eating - consume resources
+            let resourceMessage = '';
+            let emptyTileTahini = 0;
+            let resourceToConsume = chosen; // Store what we'll consume later
+            
+            if (chosen.type === 'card') {
+                resourceMessage = `Used Injera card`;
+            } else {
+                // We'll use an empty tile
+                emptyTileTahini = chosen.tile.tahini || 0;
+                const direction = getDirectionLabel(selectedTile.q, selectedTile.r, chosen.tile.q, chosen.tile.r);
+                resourceMessage = `Used empty tile ${direction}`;
+                if (emptyTileTahini > 0) {
+                    resourceMessage += ` with +${emptyTileTahini} tahini`;
+                }
+                resourceMessage += ` (consumed)`;
+            }
+            
+            // Calculate dish value based on type
+            let dishValue = 0;
+            if (dishName === 'Gomen' || dishName === 'Misir Wot' || dishName === 'Shiro') {
+                // Non-hot: 1 point
+                dishValue = 1;
+            } else if (dishName === 'Kik Alicha' || dishName === 'Azifa' || dishName === 'Tikel Gomen') {
+                // Medium-hot: 2 points
+                dishValue = 2;
+            } else if (dishName === 'Berbere Misir') {
+                // Super-hot: flat 3 points
+                dishValue = 3;
+            }
+            
+            const tahiniValue = selectedTile.tahini || 0;
+            const totalValue = dishValue + tahiniValue;
+            
+            // Award points and track eating
+            currentPlayer.score += totalValue;
+            // Add tahini points from empty tile if used
+            if (emptyTileTahini > 0) {
+                currentPlayer.score += emptyTileTahini;
+            }
+            currentPlayer.eaten.push(dishName);
+            dishEatenThisTurn = true;
+
+            // Track super-hot count (flat scoring, no progression)
+            if (dishName === 'Berbere Misir') {
+                currentPlayer.superHotCount = (currentPlayer.superHotCount || 0) + 1;
+            }
+
+            // Track tahini consumed (dish tile + empty tile if used)
+            if (tahiniValue > 0) {
+                currentPlayer.tahiniConsumed = (currentPlayer.tahiniConsumed || 0) + tahiniValue;
+            }
+            if (emptyTileTahini > 0) {
+                currentPlayer.tahiniConsumed = (currentPlayer.tahiniConsumed || 0) + emptyTileTahini;
+            }
+
+            // Track hot dish counts for special cards
+            // A dish is "hot" if inherently hot OR tile had hot sauce (tahini doesn't change this)
+            const isBerbereDish = (dishName === 'Berbere Misir');
+            const dishInherentlyHot = (dishName === 'Kik Alicha' || dishName === 'Azifa' || dishName === 'Tikel Gomen' || isBerbereDish);
+            const dishCountsAsHot = dishInherentlyHot || (selectedTile.hotSauce || 0) > 0;
+            if (dishCountsAsHot && !isBerbereDish) {
+                currentPlayer.hotDishesEaten = (currentPlayer.hotDishesEaten || 0) + 1;
+                currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
+            } else if (isBerbereDish) {
+                currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
+            } else {
+                currentPlayer.nonHotDishesEaten = (currentPlayer.nonHotDishesEaten || 0) + 1;
+            }
+            
+            // Check for bonuses
+            let bonusMessage = '';
+            
+            // Count this dish type
+            if (!currentPlayer.dishCounts) currentPlayer.dishCounts = {};
+            currentPlayer.dishCounts[dishName] = (currentPlayer.dishCounts[dishName] || 0) + 1;
+            
+            // Completion bonuses (5, 6, 7 tiles) are calculated at end of game
+            // Variety bonus is also calculated at end of game
+
+            // CONSUME THE EATING RESOURCE NOW (before hot handling)
+            // This prevents offering the same injera card for both eating and hot handling
+            if (resourceToConsume.type === 'card') {
+                // Remove the injera card used for eating
+                const cardIdx = currentPlayer.hand.findIndex(c => c.type === 'Clean Injera');
+                if (cardIdx === -1) {
+                    alert('ERROR: No Injera card found! This should not happen.');
+                    return;
+                }
+                currentPlayer.hand.splice(cardIdx, 1);
+            } else {
+                // Remove the empty tile (do this now, not later)
+                resourceToConsume.tile.removed = true;
+            }
+
+            // If it was a hot dish OR used hot empty tile, consume drink token(s)
+            // Berbere Misir is EXTRA HOT - requires 2x handling
+            // (Already calculated above in pre-check: isBerbere, needsHotDish, needsHotTile, totalHotHandling)
+            let drinkMessage = '';
+
+            if (totalHotHandling > 0) {
+                // Handle each hot requirement
+                for (let hotIdx = 0; hotIdx < totalHotHandling; hotIdx++) {
+                    const activeDrinks = currentPlayer.drinks.filter(d => d.tokens > 0);
+                    const injeraCardsNow = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+                    
+                    // Build fresh options for this hot handling
+                    let hotOptions = [];
+                    let hotOptionTypes = [];
+                    
+                    // Offer all active drinks
+                    activeDrinks.forEach(d => {
+                        hotOptions.push(`Use ${d.type} token (${d.tokens} left)`);
+                        hotOptionTypes.push({type: 'drink', drink: d});
+                    });
+                    
+                    // Injera cards always available (no token limit) - collapse to single option
+                    if (injeraCardsNow.length > 0) {
+                        hotOptions.push('Use Injera Card');
+                        hotOptionTypes.push({type: 'injera', index: 0});
+                    }
+                    
+                    if (hotOptions.length === 0) {
+                        alert('Not enough resources to handle all hot requirements!');
+                        return;
+                    }
+                    
+                    // Determine what we're handling
+                    let hotType = '';
+                    if (hotIdx === 0 && needsHotDish) hotType = 'hot dish';
+                    else hotType = 'hot tile';
+                    
+                    // Choose which to use
+                    let selectedHotOption = 0;
+                    const allInjeraHot = hotOptionTypes.every(o => o.type === 'injera');
+                    if (hotOptions.length > 1 && !allInjeraHot) {
+                        const prompt = totalHotHandling > 1
+                            ? `Handle ${hotType} (${hotIdx + 1} of ${totalHotHandling}):`
+                            : `Handle ${hotType}:`;
+                        selectedHotOption = await showSelectionModal(prompt, hotOptions);
+                        if (selectedHotOption === null) {
+                            // User tried to cancel, but we already validated resources exist
+                            // Auto-select first option since canceling would waste resources
+                            selectedHotOption = 0;
+                            alert('Hot handling is required. Auto-selected first available resource.');
+                        }
+                    }
+                    
+                    const hotChoice = hotOptionTypes[selectedHotOption];
+                    
+                    if (hotChoice.type === 'drink') {
+                        // Use drink token
+                        const usedDrink = hotChoice.drink;
+                        const actualDrinkIdx = currentPlayer.drinks.findIndex(d => d.type === usedDrink.type);
+                        
+                        currentPlayer.drinks[actualDrinkIdx].tokens--;
+
+                        // Award points for drinking
+                        let drinkPoints = 0;
+                        if (usedDrink.type === 'Coffee') drinkPoints = 1;
+                        else if (usedDrink.type === 'Beer') drinkPoints = 2;
+                        
+                        currentPlayer.score += drinkPoints;
+                        
+                        currentPlayer.drinkTokensConsumed = currentPlayer.drinkTokensConsumed || {};
+                        currentPlayer.drinkTokensConsumed[usedDrink.type] = (currentPlayer.drinkTokensConsumed[usedDrink.type] || 0) + 1;
+                        drinkMessage += `\nUsed ${usedDrink.type} for ${hotType} (+${drinkPoints} pts, ${currentPlayer.drinks[actualDrinkIdx].tokens} left)`;
+
+                        if (currentPlayer.drinks[actualDrinkIdx].tokens === 0) {
+                            const result = handleDrinkFinished(currentPlayer, usedDrink.type);
+                            drinkMessage += result.message;
+                            currentPlayer.drinks.splice(actualDrinkIdx, 1); // Remove from active drinks
+
+                            // Coffee/Beer finished → end turn after this action
+                            if (result.shouldEndTurn) {
+                                window.shouldEndTurnAfterAction = true;
+                            }
+                        }
+                    } else {
+                        // Use injera card (NO token tracking!)
+                        const cardIdx = currentPlayer.hand.findIndex(c => c.type === 'Clean Injera');
+                        currentPlayer.hand.splice(cardIdx, 1);
+                        drinkMessage += `\nUsed Injera card for ${hotType}`;
+                    }
+                }
+            }
+            
+            // Resource (Injera card or empty tile) was already consumed before hot handling
+            // (This prevents offering the eating injera for hot handling)
+
+            // Show combined message
+            const dishTileTahiniBonus = tahiniValue > 0 ? ` (including +${tahiniValue} tahini on dish tile)` : '';
+            const emptyTileBonus = emptyTileTahini > 0 ? ` + ${emptyTileTahini} from empty tile tahini` : '';
+            alert(`${discardMessage}. ${resourceMessage} to eat ${dishName} for ${totalValue} points${dishTileTahiniBonus}${emptyTileBonus}!${drinkMessage}${bonusMessage}${wasHot ? '\n(Hot token remains on tile)' : ''}`);
+            
+            // Mark dish tile as empty and preserve hot token if it was hot
+            selectedTile.empty = true;
+            selectedTile.dish = null;
+            selectedTile.tahini = 0; // Clear tahini - it was consumed with the dish
+            selectedTile.hotSauce = 0; // Hot sauce does not carry over to revealed empty tile
+            
+            // Berbere Misir (super-hot) ALWAYS leaves a hot token
+            // Other hot dishes also leave hot tokens
+            if (wasHot || dishName === 'Berbere Misir') {
+                selectedTile.hotToken = true;
+                selectedTile.hot = false;
+            }
+            
+            // Recalculate which tiles can be eaten (new empty tile created)
+            updateCanEatEmpty();
+            
+            // Check if this was the last dish
+            const dishesRemaining = boardData.filter(t => !t.empty && !t.removed).length;
+            if (dishesRemaining === 0 && !finalRoundActive) {
+                finalRoundActive = true;
+                finalRoundStartPlayer = currentPlayerIdx;
+                alert(`🎊 FINAL DISH EATEN! 🎊\n\nAll other players will get one more turn, then the game ends!`);
+            }
+            
+            // Clear selection after eating
+            selectedTile = null;
+
+            drawBoard();
+            updatePlayersPanel();
+            updateGameStatus();
+
+            // Check if turn should end due to Coffee/Beer finished
+            if (window.shouldEndTurnAfterAction) {
+                window.shouldEndTurnAfterAction = false;
+                alert('Your turn ends because your drink was finished!');
+                nextTurn();
+            }
+        }
+
+        function getAdjacentEmptyTiles(q, r) {
+            // Find all adjacent empty tiles that CAN BE EATEN (not removed AND canEatEmpty AND reachable)
+            const neighbors = getNeighbors(q, r);
+            const eatableEmptyNeighbors = [];
+            const currentReachable = getCurrentReachableTiles();
+            
+            neighbors.forEach(nCoord => {
+                const neighbor = boardData.find(t => t.q === nCoord.q && t.r === nCoord.r);
+                // Check if empty, not removed, can be eaten, AND is reachable by current player
+                const isReachable = currentReachable.some(c => c.q === nCoord.q && c.r === nCoord.r);
+                if (neighbor && neighbor.empty && !neighbor.removed && neighbor.canEatEmpty && isReachable) {
+                    eatableEmptyNeighbors.push(neighbor);
+                }
+            });
+            
+            if (eatableEmptyNeighbors.length > 0) {
+                console.log(`Tile (${q}, ${r}) has ${eatableEmptyNeighbors.length} eatable empty neighbors`);
+            }
+            
+            return eatableEmptyNeighbors;
+        }
+        
+        async function eatEmptyTile() {
+            saveStateForUndo();
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Check if a tile is selected
+            if (!selectedTile) {
+                alert('Please select a tile first by clicking on it!');
+                return;
+            }
+            
+            // Require discarding a card to eat
+            if (currentPlayer.hand.length === 0) {
+                alert('You need at least 1 card in hand to eat!');
+                return;
+            }
+            
+            // Check if tile is reachable
+            const currentReachable = getCurrentReachableTiles();
+            const isReachable = currentReachable.some(c => c.q === selectedTile.q && c.r === selectedTile.r);
+            if (!isReachable) {
+                alert('You cannot reach this tile! It is outside your reachable area (shown with light green glow).');
+                return;
+            }
+            
+            // Check if it's already removed
+            if (selectedTile.removed) {
+                alert('This tile has already been removed!');
+                return;
+            }
+            
+            // Check if it's empty
+            if (!selectedTile.empty) {
+                alert('This tile has a dish on it! Eat the dish first.');
+                return;
+            }
+            
+            // Check if it's hot (effective hotness after tahini/hotSauce) - need drink or injera
+            const isBerbereEmpty = Math.abs(selectedTile.q) <= 1 && Math.abs(selectedTile.r) <= 1 && Math.abs(selectedTile.q + selectedTile.r) <= 1;
+            const baseEmptyHotCheck = selectedTile.hotToken ? (isBerbereEmpty ? 2 : 1) : 0;
+            const effectiveEmptyHotCheck = Math.max(0, baseEmptyHotCheck + (selectedTile.hotSauce || 0) - (selectedTile.tahini || 0));
+            if (effectiveEmptyHotCheck > 0) {
+                const activeDrinks = currentPlayer.drinks.filter(d => d.tokens > 0);
+                const injeraCards = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+
+                if (activeDrinks.length === 0 && injeraCards.length === 0) {
+                    alert('This empty tile has a hot token! You need either:\n- An active drink (with tokens), OR\n- An Injera card');
+                    return;
+                }
+            }
+            
+            // Check if it can be eaten (has 2+ off-board neighbors)
+            if (!selectedTile.canEatEmpty) {
+                alert('This empty tile cannot be eaten - it needs at least 2 adjacent positions that are nothing (off-board or removed)!');
+                return;
+            }
+            
+            // DISCARD A CARD - required for eating empty tile
+            let discardedCard;
+            if (currentPlayer.hand.length === 1) {
+                // Only one card, discard it
+                discardedCard = currentPlayer.hand.pop();
+            } else {
+                const allSame = currentPlayer.hand.every(c => c.name === currentPlayer.hand[0].name);
+                if (allSame) {
+                    discardedCard = currentPlayer.hand.splice(0, 1)[0];
+                } else {
+                    // Deduplicate: show each unique card name once
+                    const seen = new Set();
+                    const uniqueOptions = [];
+                    const uniqueIndices = [];
+                    currentPlayer.hand.forEach((c, i) => {
+                        if (!seen.has(c.name)) {
+                            seen.add(c.name);
+                            uniqueOptions.push(c.name);
+                            uniqueIndices.push(i);
+                        }
+                    });
+                    const choice = await showSelectionModal('Choose a card to discard:', uniqueOptions);
+                    if (choice === null) return;
+                    discardedCard = currentPlayer.hand.splice(uniqueIndices[choice], 1)[0];
+                }
+            }
+
+            // Handle hotness (from hotToken and/or hot sauce, minus tahini)
+            let hotMessage = '';
+            {
+                const isBerbereHotToken = Math.abs(selectedTile.q) <= 1 && Math.abs(selectedTile.r) <= 1 &&
+                                        Math.abs(selectedTile.q + selectedTile.r) <= 1;
+                const baseHot = selectedTile.hotToken ? (isBerbereHotToken ? 2 : 1) : 0;
+                const hotHandlingNeeded = Math.max(0, baseHot + (selectedTile.hotSauce || 0) - (selectedTile.tahini || 0));
+                
+                // Handle each hot requirement
+                for (let hotIdx = 0; hotIdx < hotHandlingNeeded; hotIdx++) {
+                    const activeDrinks = currentPlayer.drinks.filter(d => d.tokens > 0);
+                    const injeraCards = currentPlayer.hand.filter(c => c.type === 'Clean Injera');
+                    
+                    // Build options
+                    let hotOptions = [];
+                    let hotOptionTypes = [];
+                    
+                    // Offer all active drinks
+                    activeDrinks.forEach(d => {
+                        hotOptions.push(`Use ${d.type} token (${d.tokens} left)`);
+                        hotOptionTypes.push({type: 'drink', drink: d});
+                    });
+                    
+                    // Injera always available - collapse to single option
+                    if (injeraCards.length > 0) {
+                        hotOptions.push('Use Injera Card');
+                        hotOptionTypes.push({type: 'injera', index: 0});
+                    }
+                    
+                    if (hotOptions.length === 0) {
+                        alert('Not enough resources to handle hot tile!');
+                        return;
+                    }
+                    
+                    // Choose
+                    let selectedHotOption = 0;
+                    const allInjeraHot2 = hotOptionTypes.every(o => o.type === 'injera');
+                    if (hotOptions.length > 1 && !allInjeraHot2) {
+                        const prompt = hotHandlingNeeded > 1
+                            ? `Hot empty tile! Extra hot! (${hotIdx + 1} of ${hotHandlingNeeded}):`
+                            : 'Hot empty tile! Choose how to handle it:';
+                        selectedHotOption = await showSelectionModal(prompt, hotOptions);
+                        if (selectedHotOption === null) return;
+                    }
+                    
+                    const hotChoice = hotOptionTypes[selectedHotOption];
+                    
+                    if (hotChoice.type === 'drink') {
+                        const usedDrink = hotChoice.drink;
+                        const actualDrinkIdx = currentPlayer.drinks.findIndex(d => d.type === usedDrink.type);
+                        
+                        currentPlayer.drinks[actualDrinkIdx].tokens--;
+
+                        let drinkPoints = 0;
+                        if (usedDrink.type === 'Coffee') drinkPoints = 1;
+                        else if (usedDrink.type === 'Beer') drinkPoints = 2;
+                        
+                        currentPlayer.score += drinkPoints;
+                        currentPlayer.drinkTokensConsumed = currentPlayer.drinkTokensConsumed || {};
+                        currentPlayer.drinkTokensConsumed[usedDrink.type] = (currentPlayer.drinkTokensConsumed[usedDrink.type] || 0) + 1;
+                        hotMessage += `\nUsed ${usedDrink.type} for hot tile (+${drinkPoints} pts, ${currentPlayer.drinks[actualDrinkIdx].tokens} left)`;
+
+                        if (currentPlayer.drinks[actualDrinkIdx].tokens === 0) {
+                            const result = handleDrinkFinished(currentPlayer, usedDrink.type);
+                            hotMessage += result.message;
+                            currentPlayer.drinks.splice(actualDrinkIdx, 1); // Remove from active drinks
+
+                            // Coffee/Beer finished → end turn after this action
+                            if (result.shouldEndTurn) {
+                                window.shouldEndTurnAfterAction = true;
+                            }
+                        }
+                    } else {
+                        // Use injera card (NO token tracking!)
+                        const cardIdx = currentPlayer.hand.findIndex(c => c.type === 'Clean Injera');
+                        currentPlayer.hand.splice(cardIdx, 1);
+                        hotMessage += `\nUsed Injera card for hot tile`;
+                    }
+                }
+            }
+            
+            // Award points for tahini tokens on empty tile
+            const tahiniPoints = selectedTile.tahini || 0;
+            console.log('Empty tile tahini:', tahiniPoints, 'Current score:', currentPlayer.score);
+            if (tahiniPoints > 0) {
+                currentPlayer.score += tahiniPoints;
+                currentPlayer.tahiniConsumed = (currentPlayer.tahiniConsumed || 0) + tahiniPoints;
+                console.log('Added tahini points, new score:', currentPlayer.score);
+            }
+
+            // Remove the tile
+            selectedTile.removed = true;
+            
+            // Recalculate which empty tiles can now be eaten (since we created a new gap)
+            updateCanEatEmpty();
+            
+            const pointsMessage = tahiniPoints > 0 ? ` +${tahiniPoints} points from tahini!` : '';
+            alert(`Discarded ${discardedCard.name}. ${currentPlayer.name} ate the empty injera tile!${pointsMessage}${hotMessage} It's now removed from the board.`);
+            
+            // Update display
+            updatePlayersPanel();
+            updateGameStatus();
+            
+            // Clear selection
+            selectedTile = null;
+
+            drawBoard();
+            updatePlayersPanel();
+            updateGameStatus();
+
+            // Check if turn should end due to Coffee/Beer finished
+            if (window.shouldEndTurnAfterAction) {
+                window.shouldEndTurnAfterAction = false;
+                alert('Your turn ends because your drink was finished!');
+                nextTurn();
+            }
+        }
+
+        function updateCanEatEmpty() {
+            // Recalculate canEatEmpty for all empty tiles
+            let eatableCount = 0;
+            boardData.forEach(tile => {
+                if (tile.empty && !tile.removed) {
+                    // Count neighbors that are nothing (off-board or removed)
+                    let emptyNeighbors = 0;
+                    const neighbors = getNeighbors(tile.q, tile.r);
+                    
+                    neighbors.forEach(nCoord => {
+                        const neighbor = boardData.find(t => t.q === nCoord.q && t.r === nCoord.r);
+                        if (!neighbor) {
+                            // Off board
+                            emptyNeighbors++;
+                        } else if (neighbor.removed) {
+                            // Removed tile
+                            emptyNeighbors++;
+                        }
+                    });
+                    
+                    tile.canEatEmpty = emptyNeighbors >= 2;
+                    if (tile.canEatEmpty) eatableCount++;
+                }
+            });
+            console.log('updateCanEatEmpty: Found', eatableCount, 'eatable empty tiles');
+        }
+        
+        function getNeighbors(q, r) {
+            // Return all 6 neighbor coordinates
+            return [
+                {q: q + 1, r: r},
+                {q: q + 1, r: r - 1},
+                {q: q, r: r - 1},
+                {q: q - 1, r: r},
+                {q: q - 1, r: r + 1},
+                {q: q, r: r + 1}
+            ];
+        }
+        
+        function getTrianglesContaining(q, r) {
+            const triangles = [];
+            const neighbors = getNeighbors(q, r);
+            
+            // ✅ GET REACHABLE TILES FOR CURRENT PLAYER
+            const currentReachable = getCurrentReachableTiles();
+            const reachableSet = new Set(currentReachable.map(c => `${c.q},${c.r}`));
+            
+            for (let i = 0; i < neighbors.length; i++) {
+                for (let j = i + 1; j < neighbors.length; j++) {
+                    const n1 = neighbors[i];
+                    const n2 = neighbors[j];
+                    
+                    // ✅ CHECK IF BOTH BOTTOM TILES ARE REACHABLE!
+                    if (!reachableSet.has(`${n1.q},${n1.r}`) || !reachableSet.has(`${n2.q},${n2.r}`)) {
+                        continue;  // Skip unreachable triangles
+                    }
+                    
+                    const n1Neighbors = getNeighbors(n1.q, n1.r);
+                    const areAdjacent = n1Neighbors.some(n => n.q === n2.q && n.r === n2.r);
+                    
+                    if (areAdjacent) {
+                        const tile1 = boardData.find(t => t.q === q && t.r === r);
+                        const tile2 = boardData.find(t => t.q === n1.q && t.r === n1.r);
+                        const tile3 = boardData.find(t => t.q === n2.q && t.r === n2.r);
+                        
+                        if (tile1 && tile2 && tile3 && !tile1.removed && !tile2.removed && !tile3.removed) {
+                            triangles.push([tile1, tile2, tile3]);
+                        }
+                    }
+                }
+            }
+            return triangles;
+        }
+        
+        async function addTahini() {
+            saveStateForUndo();
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Check if player has tahini card
+            const tahiniCards = currentPlayer.hand.filter(c => c.name === 'Tahini');
+            if (tahiniCards.length === 0) {
+                alert('No Tahini cards in hand!');
+                return;
+            }
+            
+            if (!selectedTile) {
+                alert('Please select a tile first by clicking on it! This will be the top of the triangle.');
+                return;
+            }
+            
+            // Check if selected tile is reachable
+            const currentReachable = getCurrentReachableTiles();
+            const isReachable = currentReachable.some(c => c.q === selectedTile.q && c.r === selectedTile.r);
+            if (!isReachable) {
+                alert('You cannot place tahini on this tile! It is outside your reachable area (shown with light green glow).');
+                return;
+            }
+            
+            if (selectedTile.removed) {
+                alert('This tile has been removed!');
+                return;
+            }
+            
+            // Find all triangles containing this tile as the "top"
+            const triangles = getTrianglesContaining(selectedTile.q, selectedTile.r);
+            
+            if (triangles.length === 0) {
+                alert('No valid triangles found! Tahini must be placed on a triangle of 3 adjacent tiles.');
+                return;
+            }
+            
+            // Categorize triangles by orientation relative to selected tile
+            const leftTriangles = [];
+            const rightTriangles = [];
+            
+            triangles.forEach(tri => {
+                // Selected tile should be the TOP of the triangle
+                // We need to identify which of the 3 tiles is highest (smallest r value)
+                const sorted = [...tri].sort((a, b) => {
+                    if (a.r !== b.r) return a.r - b.r; // Smaller r = higher up
+                    return a.q - b.q;
+                });
+                
+                const top = sorted[0];
+                const bottom1 = sorted[1];
+                const bottom2 = sorted[2];
+                
+                // Only include triangles where selected tile is the top
+                if (top.q !== selectedTile.q || top.r !== selectedTile.r) {
+                    return; // Skip this triangle
+                }
+                
+                // Determine if triangle leans left or right based on bottom tiles
+                // Left-leaning: bottom tiles are to the lower-left (smaller q)
+                // Right-leaning: bottom tiles are to the lower-right (larger q)
+                const avgQ = (bottom1.q + bottom2.q) / 2;
+                
+                if (avgQ < top.q) {
+                    leftTriangles.push([top, bottom1, bottom2]);
+                } else if (avgQ > top.q) {
+                    rightTriangles.push([top, bottom1, bottom2]);
+                }
+            });
+            
+            // Build user-friendly options (SWAPPED arrows)
+            const options = [];
+            const triangleChoices = [];
+            
+            if (leftTriangles.length > 0) {
+                options.push('◣ Left-leaning triangle');
+                triangleChoices.push(leftTriangles[0]);
+            }
+            
+            if (rightTriangles.length > 0) {
+                options.push('◢ Right-leaning triangle');
+                triangleChoices.push(rightTriangles[0]);
+            }
+            
+            if (options.length === 0) {
+                alert('No valid triangles found with this tile as the top!');
+                return;
+            }
+            
+            // Choose which triangle orientation
+            let selectedIdx = 0;
+            if (options.length > 1) {
+                selectedIdx = await showSelectionModal('Choose triangle orientation:', options);
+                if (selectedIdx === null) return;
+            }
+            
+            const triangle = triangleChoices[selectedIdx];
+            
+            // Add tahini to all 3 tiles in triangle (only if they don't have dishes or are not removed)
+            const tokensToAdd = 1;
+            let tilesAffected = 0;
+            triangle.forEach(tile => {
+                if (!tile.removed) {
+                    tile.tahini = (tile.tahini || 0) + tokensToAdd;
+                    tilesAffected++;
+                }
+            });
+            
+            // Remove tahini card from hand
+            const cardIdx = currentPlayer.hand.findIndex(c => c.name === 'Tahini');
+            currentPlayer.hand.splice(cardIdx, 1);
+            currentPlayer.tahiniCardsPlayed = (currentPlayer.tahiniCardsPlayed || 0) + 1;
+            
+            alert(`Added ${tokensToAdd} tahini token to ${options[selectedIdx]} (${tilesAffected} tiles)!`);
+            
+            drawBoard();
+            updatePlayersPanel();
+        }
+        
+        async function addHotSauce() {
+            saveStateForUndo();
+            const currentPlayer = playersData[currentPlayerIdx];
+
+            const hotSauceCards = currentPlayer.hand.filter(c => c.name === 'Add Hot Sauce');
+            if (hotSauceCards.length === 0) {
+                alert('No Hot Sauce cards in hand!');
+                return;
+            }
+
+            if (!selectedTile) {
+                alert('Please select a tile first by clicking on it! This will be the top of the triangle.');
+                return;
+            }
+
+            const currentReachable = getCurrentReachableTiles();
+            const isReachable = currentReachable.some(c => c.q === selectedTile.q && c.r === selectedTile.r);
+            if (!isReachable) {
+                alert('You cannot place hot sauce on this tile! It is outside your reachable area.');
+                return;
+            }
+
+            if (selectedTile.removed) {
+                alert('This tile has been removed!');
+                return;
+            }
+
+            const triangles = getTrianglesContaining(selectedTile.q, selectedTile.r);
+            if (triangles.length === 0) {
+                alert('No valid triangles found! Hot sauce must be placed on a triangle of 3 adjacent tiles.');
+                return;
+            }
+
+            const leftTriangles = [];
+            const rightTriangles = [];
+            triangles.forEach(tri => {
+                const sorted = [...tri].sort((a, b) => a.r !== b.r ? a.r - b.r : a.q - b.q);
+                const top = sorted[0];
+                if (top.q !== selectedTile.q || top.r !== selectedTile.r) return;
+                const avgQ = (sorted[1].q + sorted[2].q) / 2;
+                if (avgQ < top.q) leftTriangles.push(sorted);
+                else if (avgQ > top.q) rightTriangles.push(sorted);
+            });
+
+            const options = [];
+            const triangleChoices = [];
+            if (leftTriangles.length > 0) { options.push('◣ Left-leaning triangle'); triangleChoices.push(leftTriangles[0]); }
+            if (rightTriangles.length > 0) { options.push('◢ Right-leaning triangle'); triangleChoices.push(rightTriangles[0]); }
+
+            if (options.length === 0) {
+                alert('No valid triangles found with this tile as the top!');
+                return;
+            }
+
+            let selectedIdx = 0;
+            if (options.length > 1) {
+                selectedIdx = await showSelectionModal('Choose triangle orientation:', options);
+                if (selectedIdx === null) return;
+            }
+
+            const triangle = triangleChoices[selectedIdx];
+            let tilesAffected = 0;
+            triangle.forEach(tile => {
+                if (!tile.removed) {
+                    tile.hotSauce = (tile.hotSauce || 0) + 1;
+                    tilesAffected++;
+                }
+            });
+
+            // Remove hot sauce card from hand
+            const cardIdx = currentPlayer.hand.findIndex(c => c.name === 'Add Hot Sauce');
+            currentPlayer.hand.splice(cardIdx, 1);
+
+            // Draw 1 card immediately
+            drawCards(currentPlayer, 1);
+
+            alert(`Added hot sauce to ${options[selectedIdx]} (${tilesAffected} tiles)! Drew 1 card.`);
+            drawBoard();
+            updatePlayersPanel();
+        }
+
+        async function playDrinkCard() {
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Check if player already has an active drink in their cup
+            if (currentPlayer.drinks && currentPlayer.drinks.length > 0) {
+                const activeDrink = currentPlayer.drinks[0];
+                alert(`Your cup is already filled with ${activeDrink.type} (${activeDrink.tokens} tokens).\nYou must finish it before ordering another drink!`);
+                return;
+            }
+            
+            // Find drink cards in hand
+            const drinkCards = currentPlayer.hand.filter(c => c.type === 'Drink');
+            
+            if (drinkCards.length === 0) {
+                alert('No drink order cards in hand!');
+                return;
+            }
+            
+            // Show selection modal (skip if all drink cards are identical)
+            const allSameDrink = drinkCards.every(c => c.name === drinkCards[0].name);
+            let selectedIdx = 0;
+            if (drinkCards.length > 1 && !allSameDrink) {
+                const options = drinkCards.map(card => card.name);
+                selectedIdx = await showSelectionModal('Choose a drink to order:', options);
+                if (selectedIdx === null) return;
+            }
+
+            const selectedCard = drinkCards[selectedIdx];
+            
+            // Remove card from hand (it's being discarded/used)
+            const handIdx = currentPlayer.hand.findIndex(c => c.name === selectedCard.name && c.type === 'Drink');
+            currentPlayer.hand.splice(handIdx, 1);
+            currentPlayer.drinkCardsPlayed = (currentPlayer.drinkCardsPlayed || 0) + 1;
+            
+            // Extract drink type from card name (e.g., "Order Coffee" -> "Coffee")
+            const drinkType = selectedCard.name.replace('Order ', '');
+            
+            // Fill the cup with the drink (3 tokens)
+            currentPlayer.drinks.push({
+                type: drinkType,
+                tokens: 3
+            });
+            
+            alert(`Ordered ${drinkType}! Your cup is filled with 3 tokens. The order card has been discarded.`);
+            
+            updatePlayersPanel();
+            updateGameStatus();
+        }
+        
+        async function playRotateCard() {
+            saveStateForUndo();
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Find rotate cards in hand
+            const rotateCards = currentPlayer.hand.filter(c => c.name === 'Rotate Injera');
+            
+            if (rotateCards.length === 0) {
+                alert('No Rotate cards in hand!');
+                return;
+            }
+            
+            // Ask for direction
+            const direction = await showSelectionModal('Choose rotation direction:', [
+                'Clockwise (60°)',
+                'Counter-clockwise (-60°)'
+            ]);
+            
+            if (direction === null) return;
+            
+            // Rotate all tiles by transforming their coordinates
+            // Hex rotation by 60° clockwise: (q, r) -> (-r, q+r)
+            // Hex rotation by 60° counter-clockwise: (q, r) -> (-q-r, q)
+            
+            boardData.forEach(tile => {
+                const oldQ = tile.q;
+                const oldR = tile.r;
+                
+                if (direction === 0) {
+                    // Clockwise 60°: (q, r) -> (-r, q+r)
+                    tile.q = -oldR;
+                    tile.r = oldQ + oldR;
+                } else {
+                    // Counter-clockwise 60°: (q, r) -> (q+r, -q)
+                    tile.q = oldQ + oldR;
+                    tile.r = -oldQ;
+                }
+            });
+            
+            // Remove card from hand
+            const cardIdx = currentPlayer.hand.findIndex(c => c.name === 'Rotate Injera');
+            currentPlayer.hand.splice(cardIdx, 1);
+            currentPlayer.rotateCardsPlayed = (currentPlayer.rotateCardsPlayed || 0) + 1;
+
+            alert(`Rotated board ${direction === 0 ? 'clockwise' : 'counter-clockwise'}!`);
+            
+            // Recalculate everything with new coordinates
+            updateCanEatEmpty();
+            drawBoard();
+            updatePlayersPanel();
+        }
+        
+        // Removed duplicate function below
+        
+        async function drinkToken() {
+            const currentPlayer = playersData[currentPlayerIdx];
+            
+            // Find drinks with tokens
+            const activeDrinks = currentPlayer.drinks.filter(d => d.tokens > 0);
+            
+            if (activeDrinks.length === 0) {
+                alert('No active drinks with tokens!');
+                return;
+            }
+            
+            // Show selection modal
+            let selectedIdx = 0;
+            if (activeDrinks.length > 1) {
+                const options = activeDrinks.map(d => `${d.type} (${d.tokens} tokens)`);
+                selectedIdx = await showSelectionModal('Choose which drink to consume:', options);
+                if (selectedIdx === null) return;
+            }
+            
+            const selectedDrink = activeDrinks[selectedIdx];
+            
+            // Find the actual drink in the player's drinks array (match by type only, tokens change)
+            const drinkIdx = currentPlayer.drinks.findIndex(d => d.type === selectedDrink.type);
+            
+            // Consume token
+            currentPlayer.drinks[drinkIdx].tokens--;
+            currentPlayer.drinkTokensConsumed = currentPlayer.drinkTokensConsumed || {};
+            currentPlayer.drinkTokensConsumed[selectedDrink.type] = (currentPlayer.drinkTokensConsumed[selectedDrink.type] || 0) + 1;
+            // Award points
+            let points = 0;
+            if (selectedDrink.type === 'Coffee') points = 1;
+            else if (selectedDrink.type === 'Beer') points = 2;
+            // Water gives 0 points but has special ability when finished
+            
+            currentPlayer.score += points;
+            
+            console.log('=== DRINK DEBUG ===');
+            console.log('Drink type:', selectedDrink.type);
+            console.log('Tokens after decrement:', currentPlayer.drinks[drinkIdx].tokens);
+            // No immediate beer penalty - applied when drink finishes
+            
+            // Check if finished
+            if (currentPlayer.drinks[drinkIdx].tokens === 0) {
+                const result = handleDrinkFinished(currentPlayer, selectedDrink.type);
+                currentPlayer.drinks.splice(drinkIdx, 1); // Remove from active drinks
+
+                alert(`Drank ${selectedDrink.type} token! +${points} points.${result.message} Glass removed.`);
+
+                updatePlayersPanel();
+                updateGameStatus();
+
+                // Coffee/Beer finished → turn ends
+                if (result.shouldEndTurn) {
+                    alert('Your turn ends because your drink was finished!');
+                    nextTurn();
+                }
+            } else {
+                alert(`Drank ${selectedDrink.type} token! +${points} points. ${currentPlayer.drinks[drinkIdx].tokens} tokens remaining.`);
+
+                updatePlayersPanel();
+                updateGameStatus();
+            }
+        }
+        
+        function debugHand() {
+            const currentPlayer = playersData[currentPlayerIdx];
+            console.log('Current player:', currentPlayer.name);
+            console.log('Hand:', currentPlayer.hand);
+            console.log('Injera cards:', currentPlayer.hand.filter(c => c.type === 'Clean Injera'));
+            alert('Check the browser console (F12) for detailed hand information');
+        }
+        
+        function debugGiveBeer() {
+            const currentPlayer = playersData[currentPlayerIdx];
+            currentPlayer.drinks.push({
+                type: 'Beer',
+                tokens: 3
+            });
+            alert('DEBUG: Gave you Beer with 3 tokens!');
+            updatePlayersPanel();
+            updateGameStatus();
+        }
+        
+        // Handle canvas clicks
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            // Find closest tile
+            let closestTile = null;
+            let minDist = Infinity;
+            
+            boardData.forEach(tile => {
+                const {x, y} = hexToPixel(tile.q, tile.r);
+                const dist = Math.sqrt((clickX - x) ** 2 + (clickY - y) ** 2);
+                if (dist < minDist && dist < hexSize) {
+                    minDist = dist;
+                    closestTile = tile;
+                }
+            });
+            
+            if (closestTile) {
+                selectedTile = closestTile;
+                console.log('Selected:', closestTile);
+                drawBoard();
+            }
+        });
+        
+        
+        function calculateReachableTiles() {
+            /**
+             * Calculate which tiles each player can reach based on their position.
+             * Players sit at vertices of a FLAT-TOP hexagon.
+             * Each player gets a sector (wedge) of the board.
+             */
+            
+            console.log('Calculating reachable tiles for', numPlayers, 'players...');
+            
+            // Flat-top hexagon vertices at: 0°, 60°, 120°, 180°, 240°, 300°
+            let playerVertices;
+            if (numPlayers === 2) {
+                playerVertices = [300, 120];  // P1: top-right, P2: bottom-left (opposite)
+            } else if (numPlayers === 3) {
+                playerVertices = [300, 60, 180];  // 120° apart
+            } else if (numPlayers === 4) {
+                playerVertices = [300, 0, 120, 180];  // Symmetric pairs
+            } else if (numPlayers === 5) {
+                playerVertices = [300, 0, 60, 120, 240];  // skip 180°
+            } else if (numPlayers === 6) {
+                playerVertices = [300, 0, 60, 120, 180, 240];  // all vertices
+            }
+            
+            // Define sector conditions for each vertex angle
+            const vertexConditions = {
+                0:   (q, r) => q >= 0,           // Right
+                60:  (q, r) => q + r >= 0,       // Bottom-right
+                120: (q, r) => r >= 0,           // Bottom-left
+                180: (q, r) => q <= 0,           // Left
+                240: (q, r) => q + r <= 0,       // Top-left
+                300: (q, r) => r <= 0            // Top-right
+            };
+            
+            // Calculate reachable tiles for each player
+            reachableByPlayer = [];
+            
+            for (let playerIdx = 0; playerIdx < numPlayers; playerIdx++) {
+                const vertexAngle = playerVertices[playerIdx];
+                const condition = vertexConditions[vertexAngle];
+                const reachable = [];
+                
+                // Check each tile
+                boardData.forEach(tile => {
+                    if (!tile.removed && condition(tile.q, tile.r)) {
+                        reachable.push({q: tile.q, r: tile.r});
+                    }
+                });
+                
+                reachableByPlayer.push(reachable);
+                console.log(`Player ${playerIdx} (${vertexAngle}°): ${reachable.length} reachable tiles`);
+            }
+            
+            console.log('✓ Reachable tiles calculated!');
+        }
+        
+        // --- Special Cards Draft Phase ---
+        function showMultiSelectModal(title, options, numToKeep) {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background: rgba(0,0,0,0.7); display: flex;
+                    justify-content: center; align-items: center; z-index: 1000;
+                `;
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    background: white; padding: 30px; border-radius: 15px;
+                    max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                    max-height: 80vh; overflow-y: auto;
+                `;
+                const titleEl = document.createElement('h2');
+                titleEl.textContent = title;
+                titleEl.style.cssText = 'margin: 0 0 10px 0; color: #667eea;';
+                modal.appendChild(titleEl);
+
+                const subtitle = document.createElement('p');
+                subtitle.textContent = `Select ${numToKeep} card${numToKeep > 1 ? 's' : ''} to keep:`;
+                subtitle.style.cssText = 'margin: 0 0 15px 0; color: #666;';
+                modal.appendChild(subtitle);
+
+                const selected = new Set();
+                const buttons = [];
+
+                options.forEach((option, idx) => {
+                    const btn = document.createElement('button');
+                    btn.innerHTML = `<strong>${option.name}</strong><br><span style="font-size:12px">${option.description}</span>`;
+                    btn.style.cssText = `
+                        display: block; width: 100%; padding: 12px; margin: 6px 0;
+                        background: #f0f0f0; color: #333; border: 2px solid #ddd;
+                        border-radius: 8px; cursor: pointer; font-size: 14px; text-align: left;
+                    `;
+                    btn.onclick = () => {
+                        if (selected.has(idx)) {
+                            selected.delete(idx);
+                            btn.style.background = '#f0f0f0';
+                            btn.style.borderColor = '#ddd';
+                            btn.style.color = '#333';
+                        } else if (selected.size < numToKeep) {
+                            selected.add(idx);
+                            btn.style.background = '#667eea';
+                            btn.style.borderColor = '#5568d3';
+                            btn.style.color = 'white';
+                        }
+                        confirmBtn.disabled = selected.size !== numToKeep;
+                        confirmBtn.style.opacity = selected.size === numToKeep ? '1' : '0.5';
+                    };
+                    buttons.push(btn);
+                    modal.appendChild(btn);
+                });
+
+                const confirmBtn = document.createElement('button');
+                confirmBtn.textContent = `Confirm Selection (${numToKeep})`;
+                confirmBtn.disabled = true;
+                confirmBtn.style.cssText = `
+                    display: block; width: 100%; padding: 14px; margin: 15px 0 0 0;
+                    background: #28a745; color: white; border: none; border-radius: 8px;
+                    cursor: pointer; font-size: 16px; font-weight: bold; opacity: 0.5;
+                `;
+                confirmBtn.onclick = () => {
+                    if (selected.size === numToKeep) {
+                        document.body.removeChild(overlay);
+                        resolve(Array.from(selected));
+                    }
+                };
+                modal.appendChild(confirmBtn);
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+            });
+        }
+
+        async function runSpecialCardsDraft() {
+            if (!specialCardsEnabled || specialCardsDealCount === 0) return;
+
+            // Initialize tracking fields on all players
+            playersData.forEach(p => {
+                p.specialCards = p.specialCards || [];
+                p.tahiniConsumed = p.tahiniConsumed || 0;
+                p.hotDishesEaten = p.hotDishesEaten || 0;
+                p.totalHotEaten = p.totalHotEaten || 0;
+                p.nonHotDishesEaten = p.nonHotDishesEaten || 0;
+            });
+
+            // Shuffle the deck
+            const deck = [...SPECIAL_CARDS_DECK];
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+
+            // Deal N cards to each player
+            const N = specialCardsDealCount;
+            const M = specialCardsKeepCount;
+
+            for (let pIdx = 0; pIdx < playersData.length; pIdx++) {
+                const dealt = deck.splice(0, N);
+                if (dealt.length === 0) break;
+
+                const player = playersData[pIdx];
+
+                if (M >= dealt.length) {
+                    // Keep all
+                    player.specialCards = dealt.map(c => ({id: c.id, name: c.name, description: c.description}));
+                } else if (player.isAI) {
+                    // AI: random selection
+                    const shuffled = [...dealt];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    player.specialCards = shuffled.slice(0, M).map(c => ({id: c.id, name: c.name, description: c.description}));
+                } else {
+                    // Human: show selection modal
+                    const selectedIndices = await showMultiSelectModal(
+                        `${player.name} - Choose your secret cards`,
+                        dealt,
+                        M
+                    );
+                    player.specialCards = selectedIndices.map(i => ({
+                        id: dealt[i].id, name: dealt[i].name, description: dealt[i].description
+                    }));
+                }
+
+                console.log(`${player.name} got special cards:`, player.specialCards.map(c => c.name));
+            }
+        }
+
+        // Initial draw
+        randomizeInitialState();
+        calculateReachableTiles(); // Randomize cards on each game start
+        console.log('Initial board data:', boardData.filter(t => t.empty).map(t => ({q: t.q, r: t.r, canEatEmpty: t.canEatEmpty})));
+        updateCanEatEmpty();
+        console.log('After updateCanEatEmpty:', boardData.filter(t => t.empty).map(t => ({q: t.q, r: t.r, canEatEmpty: t.canEatEmpty})));
+        drawBoard();
+        updatePlayersPanel();
+        updateGameStatus();
+
+        // Run special cards draft (async - UI will update when done)
+        runSpecialCardsDraft().then(() => {
+            updatePlayersPanel();
+        });
+    </script>
+    <script src="ai_support.js"></script>
+</body>
+</html>
