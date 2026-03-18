@@ -11,7 +11,7 @@
  * 
  * 3. Modify nextTurn() to call handleAITurnIfNeeded() at the end
  * 
- * 4. Change Berbere scoring to 3 points (search for "Berbere Misir" in testEat function)
+ * 4. Change Key Sir scoring to 3 points (search for "Key Sir" in testEat function)
  */
 
 // ==================== AI CONFIGURATION ====================
@@ -259,9 +259,9 @@ async function executeAIEatDish(action) {
     // 2. Calculate and award points
     const dishName = tile.dish;
     let dishValue = 0;
-    if (['Gomen', 'Misir Wot', 'Shiro'].includes(dishName)) dishValue = 1;
-    else if (['Kik Alicha', 'Azifa', 'Tikel Gomen'].includes(dishName)) dishValue = 2;
-    else if (dishName === 'Berbere Misir') dishValue = 3;
+    if (['Gomen', 'Azifa', 'Shiro'].includes(dishName)) dishValue = 1;
+    else if (['Kik Alicha', 'Misir Wot', 'Tikel Gomen'].includes(dishName)) dishValue = 2;
+    else if (dishName === 'Key Sir') dishValue = 3;
 
     const tahiniValue = tile.tahini || 0;
     currentPlayer.score += dishValue + tahiniValue;
@@ -278,12 +278,12 @@ async function executeAIEatDish(action) {
 
     // 4. Handle hot using the exact recipe from the action
     const wasHot = tile.hot;
-    const isBerbere = dishName === 'Berbere Misir';
+    const isBerbere = dishName === 'Key Sir';
 
     // Track hot dish counts for special cards
     if (isBerbere) {
         currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
-    } else if (dishName === 'Kik Alicha' || dishName === 'Azifa' || dishName === 'Tikel Gomen') {
+    } else if (dishName === 'Kik Alicha' || dishName === 'Misir Wot' || dishName === 'Tikel Gomen') {
         currentPlayer.hotDishesEaten = (currentPlayer.hotDishesEaten || 0) + 1;
         currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
     }
@@ -331,7 +331,7 @@ async function executeAIEatDish(action) {
     tile.dish = null;
     tile.tahini = 0;
 
-    if (wasHot || dishName === 'Berbere Misir') {
+    if (wasHot || dishName === 'Key Sir') {
         tile.hotToken = true;
         tile.hot = false;
     }
@@ -701,7 +701,7 @@ function inferAction(preState, postState, playerId) {
             }
 
             // Compute hot level
-            const isBerbere = preTile.dish === 'Berbere Misir';
+            const isBerbere = preTile.dish === 'Key Sir';
             const hotDishLevel = isBerbere ? 2 : (preTile.hot ? 1 : 0);
             let hotTileLevel = 0;
             if (resourceType === 'tile' && resourceTileCoord) {

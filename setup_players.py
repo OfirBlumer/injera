@@ -124,12 +124,12 @@ def create_players_json(players, base_hand_size):
             "eaten": [],
             "dishCounts": {
                 "Gomen": 0,
-                "Misir Wot": 0,
+                "Azifa": 0,
                 "Shiro": 0,
                 "Kik Alicha": 0,
-                "Azifa": 0,
+                "Misir Wot": 0,
                 "Tikel Gomen": 0,
-                "Berbere Misir": 0
+                "Key Sir": 0
             },
             "tastedAllTypes": False,
             "drinks": [],

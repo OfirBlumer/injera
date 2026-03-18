@@ -16,7 +16,7 @@ test_data = {
     "current_player_idx": 0,
     "board": [
         {"q": 4, "r": 0, "dish": "Gomen", "hot": False, "hotToken": False, "tahini": 0, "empty": False, "removed": False, "canEatEmpty": False},
-        {"q": 3, "r": 1, "dish": "Misir Wot", "hot": False, "hotToken": False, "tahini": 0, "empty": False, "removed": False, "canEatEmpty": False},
+        {"q": 3, "r": 1, "dish": "Azifa", "hot": False, "hotToken": False, "tahini": 0, "empty": False, "removed": False, "canEatEmpty": False},
     ],
     "players": [
         {

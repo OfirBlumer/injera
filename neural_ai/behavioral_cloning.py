@@ -32,17 +32,22 @@ from neural_ai.policy_network import PolicyNetwork
 
 
 def load_recordings(recordings_dir: Path) -> List[Dict]:
-    """Load all recorded games from a directory"""
+    """Load all recorded games from a directory.
+
+    Supports the HTML recording format:
+      {version, num_players, steps: [{state, action}, ...]}
+    Files named injera_*.json (downloaded from the game UI).
+    """
     recordings = []
-    for file_path in sorted(recordings_dir.glob('game_*.json')):
+    for file_path in sorted(recordings_dir.glob('*.json')):
         with open(file_path, 'r') as f:
             data = json.load(f)
+        steps = data.get('steps', [])
         recordings.append({
             'file': file_path.name,
-            'metadata': data['metadata'],
-            'actions': data['actions']
+            'steps': steps
         })
-        print(f"  Loaded {file_path.name}: {len(data['actions'])} steps")
+        print(f"  Loaded {file_path.name}: {len(steps)} steps")
     return recordings
 
 
@@ -126,12 +131,21 @@ def match_action_to_fixed_index(recorded_action: Dict, legal_actions: List[Actio
             if legal.rotation_direction == recorded_action.get('rotation_direction'):
                 matched = True
 
-        elif action_type == 'add_tahini':
+        elif action_type in ('add_tahini', 'add_hot_sauce'):
             if legal.tile_coord == tuple(recorded_action.get('tile_coord', [])):
-                matched = True
+                orient = recorded_action.get('triangle_orientation')
+                if orient is None or legal.triangle_orientation == orient:
+                    matched = True
 
-        elif action_type == 'end_turn':
+        elif action_type in ('end_turn', 'discard_redraw'):
             matched = True
+
+        elif action_type == 'select_special_cards':
+            # Support both old format (kept_card_ids: [str]) and new format (kept_cards: [{id, name}])
+            raw = recorded_action.get('kept_card_ids') or [c['id'] for c in recorded_action.get('kept_cards', []) if isinstance(c, dict)]
+            kept = [c if isinstance(c, str) else c.get('id', '') for c in raw]
+            if legal.kept_card_ids and sorted(legal.kept_card_ids) == sorted(kept):
+                matched = True
 
         if matched:
             fi = action_to_fixed_index(legal, coord_to_idx, board)
@@ -151,11 +165,11 @@ def prepare_training_data(recordings: List[Dict], encoder: StateEncoder) -> List
     total = 0
 
     for recording in recordings:
-        for step in recording['actions']:
+        for step in recording['steps']:
             total += 1
-            game_state_data = step['game_state']
+            game_state_data = step['state']
             recorded_action = step['action']
-            player_id = step['player_id']
+            player_id = recorded_action.get('player_id', game_state_data.get('current_player_idx', 0))
 
             try:
                 # Convert to GameState
@@ -228,7 +242,7 @@ def train_behavioral_cloning(
         print("No recordings found! Play some games with recording enabled first.")
         return
 
-    total_steps = sum(len(r['actions']) for r in recordings)
+    total_steps = sum(len(r['steps']) for r in recordings)
     print(f"Loaded {len(recordings)} games, {total_steps} total steps")
 
     # Prepare training data

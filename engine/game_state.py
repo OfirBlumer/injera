@@ -18,6 +18,8 @@ class ActionType(Enum):
     ADD_TAHINI = "add_tahini"
     ADD_HOT_SAUCE = "add_hot_sauce"
     END_TURN = "end_turn"
+    DISCARD_REDRAW = "discard_redraw"
+    SELECT_SPECIAL_CARDS = "select_special_cards"
 
 
 def normalize_card_name(name: str) -> str:
@@ -65,6 +67,10 @@ class Action:
     # (all rotate cards are identical, so first index is fine)
     card_index: Optional[int] = None
 
+    # Draft action (select_special_cards)
+    dealt_card_ids: Optional[List[str]] = None   # All cards shown to the player
+    kept_card_ids: Optional[List[str]] = None    # Cards the player chose to keep
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
         return {
@@ -80,6 +86,8 @@ class Action:
             'rotation_direction': self.rotation_direction,
             'triangle_orientation': self.triangle_orientation,
             'card_index': self.card_index,
+            'dealt_card_ids': self.dealt_card_ids,
+            'kept_card_ids': self.kept_card_ids,
         }
 
     @classmethod
@@ -98,6 +106,8 @@ class Action:
             rotation_direction=data.get('rotation_direction'),
             triangle_orientation=data.get('triangle_orientation'),
             card_index=data.get('card_index'),
+            dealt_card_ids=data.get('dealt_card_ids'),
+            kept_card_ids=data.get('kept_card_ids'),
         )
 
 
@@ -207,6 +217,8 @@ class GameState:
     final_round_start_player: int = -1
     game_over: bool = False
     winner_id: Optional[int] = None
+    # Cards dealt to current player during the draft phase (empty outside draft)
+    draft_dealt_cards: List[str] = field(default_factory=list)
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -246,7 +258,8 @@ class GameState:
             'final_round_active': self.final_round_active,
             'final_round_start_player': self.final_round_start_player,
             'game_over': self.game_over,
-            'winner_id': self.winner_id
+            'winner_id': self.winner_id,
+            'draft_dealt_cards': self.draft_dealt_cards,
         }
     
     @classmethod
@@ -321,7 +334,8 @@ class GameState:
             final_round_active=data['final_round_active'],
             final_round_start_player=data['final_round_start_player'],
             game_over=data.get('game_over', False),
-            winner_id=data.get('winner_id')
+            winner_id=data.get('winner_id'),
+            draft_dealt_cards=data.get('draft_dealt_cards', []),
         )
     
     def get_current_player(self) -> PlayerState:

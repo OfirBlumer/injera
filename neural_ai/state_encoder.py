@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Any, Optional
 from enum import Enum
 
 # Game constants
-DISH_TYPES = ['Gomen', 'Misir Wot', 'Shiro', 'Kik Alicha', 'Azifa', 'Tikel Gomen', 'Berbere Misir']
+DISH_TYPES = ['Gomen', 'Azifa', 'Shiro', 'Kik Alicha', 'Misir Wot', 'Tikel Gomen', 'Key Sir']
 CARD_TYPES = ['Injera', 'Rotate', 'Beer', 'Water', 'Coffee', 'Tahini', 'HotSauce']
 DRINK_TYPES = ['Beer', 'Water', 'Coffee']
 
@@ -18,12 +18,17 @@ MAX_PLAYERS = 6
 MAX_HAND_SIZE = 12  # Conservative estimate
 NUM_SPECIAL_CARDS = 19
 SPECIAL_CARD_NAME_TO_IDX = {
-    'four_by_four': 0, 'tahini_freak': 1, 'sesame_intolerance': 2, 'tahini_queen': 3,
-    'tasting_menu': 4, 'picky_eater': 5, 'some_like_it_hot': 6, 'hot_monster': 7,
-    'berbere_freak': 8, 'no_hot_for_you': 9, 'peas_please': 10, 'peas_prince': 11,
-    'lentils_party': 12, 'lentils_princess': 13, 'savage_cabbage': 14, 'cabbage_king': 15,
+    '4x4': 0, 'tahini_party': 1, 'sesame_intolerance': 2, 'tahini_queen': 3,
+    'tasting_menu': 4, 'picky_eater': 5, 'some_like_it_hot': 6, 'too_hot_to_handle': 7,
+    'beetroot_boss': 8, 'no_hot_for_you': 9, 'peas_please': 10, 'peas_prince': 11,
+    'lentils_freak': 12, 'lentils_princess': 13, 'cabbage_savage': 14, 'cabbage_king': 15,
     'healthy_appetite': 16, 'consolation_prize': 17, 'delicate_palate': 18,
+    # Legacy aliases for backward compatibility with old recordings
+    'four_by_four': 0, 'tahini_freak': 1, 'hot_monster': 7,
+    'berbere_freak': 8, 'lentils_party': 12, 'savage_cabbage': 14,
 }
+# Reverse mapping: index → card id
+SPECIAL_CARD_IDX_TO_NAME: Dict[int, str] = {v: k for k, v in SPECIAL_CARD_NAME_TO_IDX.items()}
 
 # ==================== FIXED ACTION SPACE ====================
 # Each action type occupies a fixed region. Same semantic action = same index always.
@@ -67,7 +72,24 @@ BASE_ADD_HOT_SAUCE = BASE_ADD_TAHINI + BOARD_SIZE * 2        # 122 slots (61*2)
 BASE_EAT_DISH = BASE_ADD_HOT_SAUCE + BOARD_SIZE * 2          # 12810 slots (61*210)
 BASE_EAT_EMPTY_TILE = BASE_EAT_DISH + BOARD_SIZE * EAT_DISH_STRIDE_PER_TILE  # 1830 slots (61*30)
 INDEX_END_TURN = BASE_EAT_EMPTY_TILE + BOARD_SIZE * EAT_EMPTY_STRIDE_PER_TILE
-ACTION_SPACE_SIZE = INDEX_END_TURN + 1  # 14893
+INDEX_DISCARD_REDRAW = INDEX_END_TURN + 1
+
+# Draft action: choose which pair of special cards to keep
+# C(19, 2) = 171 possible pairs; only legal pair indices are unmasked during the draft
+NUM_DRAFT_PAIRS = NUM_SPECIAL_CARDS * (NUM_SPECIAL_CARDS - 1) // 2  # 171
+BASE_SELECT_DRAFT = INDEX_DISCARD_REDRAW + 1
+ACTION_SPACE_SIZE = BASE_SELECT_DRAFT + NUM_DRAFT_PAIRS  # 15065
+
+# Precomputed pair <-> index mappings (sorted card indices i < j)
+DRAFT_PAIR_TO_IDX: Dict[Tuple[int, int], int] = {}
+DRAFT_IDX_TO_PAIR: Dict[int, Tuple[int, int]] = {}
+_draft_idx = 0
+for _i in range(NUM_SPECIAL_CARDS):
+    for _j in range(_i + 1, NUM_SPECIAL_CARDS):
+        DRAFT_PAIR_TO_IDX[(_i, _j)] = _draft_idx
+        DRAFT_IDX_TO_PAIR[_draft_idx] = (_i, _j)
+        _draft_idx += 1
+del _draft_idx, _i, _j
 
 
 def build_coord_to_board_idx(board: List[Dict]) -> Dict[Tuple[int, int], int]:
@@ -235,6 +257,22 @@ def action_to_fixed_index(action, coord_to_idx: Dict, board: List[Dict]) -> int:
     elif atype == 'end_turn':
         return INDEX_END_TURN
 
+    elif atype == 'discard_redraw':
+        return INDEX_DISCARD_REDRAW
+
+    elif atype == 'select_special_cards':
+        # Support both old format (kept_card_ids: [str]) and new format (kept_cards: [{id, name}])
+        raw_kept = _get('kept_card_ids') or [c['id'] for c in (_get('kept_cards') or []) if isinstance(c, dict)]
+        kept = [c if isinstance(c, str) else c.get('id', '') for c in raw_kept]
+        indices = sorted(
+            SPECIAL_CARD_NAME_TO_IDX[c] for c in kept if c in SPECIAL_CARD_NAME_TO_IDX
+        )
+        if len(indices) == 2:
+            pair = (indices[0], indices[1])
+            if pair in DRAFT_PAIR_TO_IDX:
+                return BASE_SELECT_DRAFT + DRAFT_PAIR_TO_IDX[pair]
+        return -1
+
     return -1
 
 
@@ -244,6 +282,19 @@ def fixed_index_to_action_params(index: int) -> Dict[str, Any]:
     Note: For eat_dish with resource_type='tile', this returns the resource
     category but not the specific resource_tile_coord.
     """
+    if index >= BASE_SELECT_DRAFT:
+        pair_idx = index - BASE_SELECT_DRAFT
+        if pair_idx in DRAFT_IDX_TO_PAIR:
+            i, j = DRAFT_IDX_TO_PAIR[pair_idx]
+            return {
+                'action_type': 'select_special_cards',
+                'kept_card_ids': [SPECIAL_CARD_IDX_TO_NAME[i], SPECIAL_CARD_IDX_TO_NAME[j]]
+            }
+        return {'action_type': 'unknown'}
+
+    if index == INDEX_DISCARD_REDRAW:
+        return {'action_type': 'discard_redraw'}
+
     if index == INDEX_END_TURN:
         return {'action_type': 'end_turn'}
 
@@ -277,6 +328,16 @@ def fixed_index_to_action_params(index: int) -> Dict[str, Any]:
             'resource_description': resource_names[resource_cat],
             'discard_card_type': DISCARD_TYPES_ORDER[discard_idx],
             'num_drink_tokens_for_hot': hot
+        }
+
+    if index >= BASE_ADD_HOT_SAUCE:
+        sub = index - BASE_ADD_HOT_SAUCE
+        tile_idx = sub // 2
+        orient_idx = sub % 2
+        return {
+            'action_type': 'add_hot_sauce',
+            'tile_idx': tile_idx,
+            'triangle_orientation': ORIENTATION_ORDER[orient_idx]
         }
 
     if index >= BASE_ADD_TAHINI:
@@ -331,17 +392,20 @@ class StateEncoder:
             self.special_cards_features
         )
 
+        # Draft context: which cards were dealt to the current player this draft step
+        self.draft_dealt_features = NUM_SPECIAL_CARDS  # 19-bit one-hot over the dealt cards
+
         # Total state size
         self.board_features_size = BOARD_SIZE * self.board_features_per_tile
         self.players_features_size = MAX_PLAYERS * self.features_per_player
-        self.deck_features_size = len(CARD_TYPES)  # remaining count of each card type
-        self.meta_features_size = 1  # num_players
+        self.deck_features_size = 0  # removed: AI only sees deck size (in meta), not composition or other hands
+        self.meta_features_size = 2  # num_players, cards_remaining
 
         self.total_state_size = (
             self.board_features_size +
             self.players_features_size +
-            self.deck_features_size +
-            self.meta_features_size
+            self.meta_features_size +
+            self.draft_dealt_features
         )
 
     def encode_state(self, game_state: Dict[str, Any], current_player_idx: int) -> np.ndarray:
@@ -386,16 +450,19 @@ class StateEncoder:
         )
         features.append(players_features)
 
-        # 3. Encode UNSEEN cards (deck + other players' hands)
-        # Need to pass rotated players so _encode_deck knows current player is at index 0
-        rotated_players = [game_state['players'][(current_player_idx + i) % game_state['num_players']]
-                          for i in range(game_state['num_players'])]
-        deck_features = self._encode_deck(game_state['deck'], rotated_players)
-        features.append(deck_features)
-
-        # 4. Meta features
-        meta_features = np.array([game_state['num_players']], dtype=np.float32)
+        # 3. Meta features
+        deck = game_state.get('deck', {})
+        cards_remaining = deck.get('cards_remaining', deck.get('cardsRemaining', 0))
+        meta_features = np.array([game_state['num_players'], cards_remaining / 60.0], dtype=np.float32)
         features.append(meta_features)
+
+        # 5. Draft context: which cards were dealt to the current player this step
+        draft_features = np.zeros(self.draft_dealt_features, dtype=np.float32)
+        for card_id in game_state.get('draft_dealt_cards', []):
+            idx = SPECIAL_CARD_NAME_TO_IDX.get(card_id)
+            if idx is not None:
+                draft_features[idx] = 1.0
+        features.append(draft_features)
 
         # Concatenate all features
         state_vector = np.concatenate(features)
@@ -504,27 +571,28 @@ class StateEncoder:
                     dish_idx = DISH_TYPES.index(dish_type)
                     features[dish_counts_offset + dish_idx] = dish_counts[dish_type] / 7.0  # Max 7
 
-            # Special cards (18-bit binary vector)
+            # Special cards (18-bit binary vector) — only for current player (secret from others)
             sc_offset = dish_counts_offset + len(DISH_TYPES)
-            special_cards = player.get('specialCards', player.get('special_cards', []))
-            for card_item in special_cards:
-                # JS sends objects {id, name, description}; Python sends plain ints
-                raw = card_item['id'] if isinstance(card_item, dict) else card_item
-                card_idx = SPECIAL_CARD_NAME_TO_IDX.get(raw, raw) if isinstance(raw, str) else int(raw)
-                if 0 <= card_idx < NUM_SPECIAL_CARDS:
-                    features[sc_offset + card_idx] = 1.0
+            if i == 0:
+                special_cards = player.get('specialCards', player.get('special_cards', []))
+                for card_item in special_cards:
+                    # JS sends objects {id, name, description}; Python sends plain ints
+                    raw = card_item['id'] if isinstance(card_item, dict) else card_item
+                    card_idx = SPECIAL_CARD_NAME_TO_IDX.get(raw, raw) if isinstance(raw, str) else int(raw)
+                    if 0 <= card_idx < NUM_SPECIAL_CARDS:
+                        features[sc_offset + card_idx] = 1.0
 
         return features
 
     def _encode_deck(self, deck: Dict, players: List[Dict]) -> np.ndarray:
         """
-        Encode UNSEEN cards from current player's perspective
-        = Deck cards + all other players' hands (hidden information)
+        Unused — kept for reference. AI now only sees deck size (via meta features).
+        Other players' hand types are also not exposed; only hand COUNT is encoded per player.
         """
         features = np.zeros(self.deck_features_size, dtype=np.float32)
 
-        # Start with deck composition
-        composition = deck.get('composition', {}).copy()
+        # Only encode other players' hand cards (current player can't see these)
+        composition = {}
 
         # Add cards from OTHER players' hands (current player can't see these)
         # Note: In encode_state, current player is first (index 0) after rotation

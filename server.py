@@ -166,13 +166,30 @@ def save_game():
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     GAME_DATA_DIR.mkdir(exist_ok=True)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    ts = data.pop('ts', None) or datetime.now().strftime('%Y%m%d%H%M%S')
     n = data.get('config', {}).get('players', 'x')
     has_ai = any(p != 'human' for ck in [data.get('config', {}).get('checkpoints', [])] for p in ck)
     mode = 'n' if has_ai else 'h'
     filename = GAME_DATA_DIR / f'game_{n}p_{ts}_{mode}.json'
     with open(filename, 'w') as f:
         json.dump(data, f, indent=2)
+    return jsonify({'saved': str(filename)})
+
+
+@app.route('/save_recording', methods=['POST'])
+def save_recording():
+    """Save a full game recording (state, action steps) to the game_data/ directory."""
+    body = request.get_json()
+    if not body:
+        return jsonify({'error': 'No data provided'}), 400
+    GAME_DATA_DIR.mkdir(exist_ok=True)
+    recording = body.get('data', {})
+    ts = body.get('ts', datetime.now().strftime('%Y%m%d%H%M%S'))
+    mode = body.get('mode', 'h')
+    n = recording.get('num_players', 'x')
+    filename = GAME_DATA_DIR / f'recording_{n}p_{ts}_{mode}.json'
+    with open(filename, 'w') as f:
+        json.dump(recording, f, indent=2)
     return jsonify({'saved': str(filename)})
 
 

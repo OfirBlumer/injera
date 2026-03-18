@@ -24,7 +24,7 @@ def create_test_game_state():
     board = [
         TileState(q=0, r=0, dish="Gomen", hot=False, empty=False),
         TileState(q=1, r=0, dish="Shiro", hot=False, empty=False),
-        TileState(q=0, r=1, dish="Berbere Misir", hot=True, empty=False),
+        TileState(q=0, r=1, dish="Key Sir", hot=True, empty=False),
         TileState(q=-1, r=0, dish=None, empty=True, can_eat_empty=False),
     ]
 

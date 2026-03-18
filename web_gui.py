@@ -253,8 +253,8 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
                 <strong>Numbered circles</strong> = Player positions<br>
                 <strong>Green outline</strong> = Empty tile can be eaten<br>
                 <strong>Blue outline</strong> = Can eat without Injera card<br>
-                <strong>Dishes:</strong> Non-hot: G=Gomen, M=Misir Wot, S=Shiro<br>
-                Medium-hot: K=Kik Alicha, A=Azifa, T=Tikel Gomen | Super-hot: B=Berbere Misir<br>
+                <strong>Dishes:</strong> Non-hot: G=Gomen, A=Azifa, S=Shiro<br>
+                Medium-hot: KA=Kik Alicha, M=Misir Wot, T=Tikel Gomen | Super-hot: KS=Key Sir<br>
                 <strong>Deck (60 cards):</strong> 35 Injera, 10 Rotate, 6 Tahini, 3 Order Coffee, 3 Order Beer, 3 Order Water<br>
                 <strong>Drinks:</strong> Order cards fill your cup with 3 tokens. Coffee=1pt, Beer=3pts, Water=0pts. Water refills hand once per turn; 2nd Water ends turn!<br>
                 <em style="font-size: 10px;">Current game: {num_players} players. To change: see injera_game.py for instructions</em>
@@ -310,16 +310,16 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
         const dishColors = {{
             // Non-hot (cooler colors)
             'Gomen': '#90EE90',           // Light green (collard greens)
-            'Misir Wot': '#CD5C5C',       // Indian red (red lentils)
+            'Azifa': '#CD5C5C',       // Indian red (red lentils)
             'Shiro': '#FFE4B5',           // Moccasin (chickpea)
             
             // Medium-hot (warm colors)
             'Kik Alicha': '#F0E68C',      // Khaki (yellow split peas)
-            'Azifa': '#DDA0DD',           // Plum (lentil salad)
+            'Misir Wot': '#DC143C',           // Crimson (spicy red lentils)
             'Tikel Gomen': '#9ACD32',     // Yellow green (cabbage) - more distinct from Gomen
-            
+
             // Super-hot (intense color)
-            'Berbere Misir': '#DC143C'    // Crimson (very spicy!)
+            'Key Sir': '#DDA0DD'    // Plum (beetroot)
         }};
         
         function hexToPixel(q, r) {{
@@ -397,14 +397,15 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     
-                    let label = tile.dish[0];
+                    const dishAbbr = {{'Misir Wot':'M','Kik Alicha':'KA','Tikel Gomen':'T','Key Sir':'KS'}};
+                    let label = dishAbbr[tile.dish] || tile.dish[0];
                     if (tile.tahini > 0) label += '+' + tile.tahini;
                     ctx.fillText(label, x, y);
                     
                     if (tile.hot) {{
                         ctx.font = '16px Arial';
                         // Berbere is extra hot - show double flames
-                        const flames = tile.dish === 'Berbere Misir' ? 'ðŸ”¥ðŸ”¥' : 'ðŸ”¥';
+                        const flames = tile.dish === 'Key Sir' ? 'ðŸ”¥ðŸ”¥' : 'ðŸ”¥';
                         ctx.fillText(flames, x, y - 15);
                     }}
                 }} else {{
@@ -550,9 +551,9 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
                                 // Get abbreviation: first letter, or special cases
                                 let abbr = dish.charAt(0); // Default: first letter
                                 if (dish === 'Misir Wot') abbr = 'M';
-                                else if (dish === 'Kik Alicha') abbr = 'K';
+                                else if (dish === 'Kik Alicha') abbr = 'KA';
                                 else if (dish === 'Tikel Gomen') abbr = 'T';
-                                else if (dish === 'Berbere Misir') abbr = 'B';
+                                else if (dish === 'Key Sir') abbr = 'KS';
                                 
                                 return `${{abbr}}:${{count}}${{count === 7 ? 'âœ“' : ''}}`;
                             }}).join(' ') || 'None'}}
@@ -1082,7 +1083,7 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
             // PRE-CHECK: Will hot handling succeed? Calculate requirements first
             const dishName = selectedTile.dish;
             const wasHot = selectedTile.hot;
-            const isBerbere = dishName === 'Berbere Misir';
+            const isBerbere = dishName === 'Key Sir';
             const needsHotDish = wasHot ? (isBerbere ? 2 : 1) : 0;
             
             let needsHotTile = 0;
@@ -1194,13 +1195,13 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
             
             // Calculate dish value based on type
             let dishValue = 0;
-            if (dishName === 'Gomen' || dishName === 'Misir Wot' || dishName === 'Shiro') {{
+            if (dishName === 'Gomen' || dishName === 'Azifa' || dishName === 'Shiro') {{
                 // Non-hot: 1 point
                 dishValue = 1;
-            }} else if (dishName === 'Kik Alicha' || dishName === 'Azifa' || dishName === 'Tikel Gomen') {{
+            }} else if (dishName === 'Kik Alicha' || dishName === 'Misir Wot' || dishName === 'Tikel Gomen') {{
                 // Medium-hot: 2 points
                 dishValue = 2;
-            }} else if (dishName === 'Berbere Misir') {{
+            }} else if (dishName === 'Key Sir') {{
                 // Super-hot: flat 3 points
                 dishValue = 3;
             }}
@@ -1217,7 +1218,7 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
             currentPlayer.eaten.push(dishName);
             
             // Track super-hot count (flat scoring, no progression)
-            if (dishName === 'Berbere Misir') {{
+            if (dishName === 'Key Sir') {{
                 currentPlayer.superHotCount = (currentPlayer.superHotCount || 0) + 1;
             }}
             
@@ -1247,7 +1248,7 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
             }}
 
             // If it was a hot dish OR used hot empty tile, consume drink token(s)
-            // Berbere Misir is EXTRA HOT - requires 2x handling
+            // Key Sir is EXTRA HOT - requires 2x handling
             // (Already calculated above in pre-check: isBerbere, needsHotDish, needsHotTile, totalHotHandling)
             let drinkMessage = '';
             
@@ -1368,9 +1369,9 @@ def generate_web_gui(board: Board, players: List[Player], deck: Deck, num_player
             selectedTile.dish = null;
             selectedTile.tahini = 0; // Clear tahini - it was consumed with the dish
             
-            // Berbere Misir (super-hot) ALWAYS leaves a hot token
+            // Key Sir (super-hot) ALWAYS leaves a hot token
             // Other hot dishes also leave hot tokens
-            if (wasHot || dishName === 'Berbere Misir') {{
+            if (wasHot || dishName === 'Key Sir') {{
                 selectedTile.hotToken = true;
                 selectedTile.hot = false;
             }}

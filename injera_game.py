@@ -17,16 +17,16 @@ class DishType(Enum):
     """7 vegan Ethiopian dish types"""
     # Non-hot dishes (1 point, +15 bonus for eating all 7 tiles of one type)
     GOMEN = "Gomen"              # Collard greens
-    MISIR_WOT = "Misir Wot"      # Red lentils
+    MISIR_WOT = "Azifa"      # Red lentils
     SHIRO = "Shiro"              # Chickpea stew
     
     # Medium-hot dishes (2 points, no bonus)
     KIK_ALICHA = "Kik Alicha"    # Yellow split peas
-    AZIFA = "Azifa"              # Lentil salad
+    AZIFA = "Misir Wot"              # Lentil salad
     TIKEL_GOMEN = "Tikel Gomen"  # Cabbage with carrots
     
     # Super-hot dish (center only, progressive scoring)
-    BERBERE_MISIR = "Berbere Misir"  # Very spicy red lentils
+    BERBERE_MISIR = "Key Sir"  # Very spicy red lentils
     
     @staticmethod
     def get_non_hot():

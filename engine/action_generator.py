@@ -41,10 +41,21 @@ class ActionGenerator:
         # 5. Play rotate card actions
         actions.extend(ActionGenerator._get_play_rotate_actions(state, player))
 
-        # 6. Add tahini actions
+        # 6. Add tahini actions (unrestricted — any tile on the board)
         actions.extend(ActionGenerator._get_add_tahini_actions(state, player))
 
-        # 7. End turn (always available)
+        # 7. Add hot sauce actions (unrestricted — any tile on the board)
+        actions.extend(ActionGenerator._get_add_hot_sauce_actions(state, player))
+
+        # 8. Discard all & redraw N-1
+        actions.extend(ActionGenerator._get_discard_redraw_actions(state, player))
+
+        # 9. Special card draft (only during the draft phase)
+        draft_actions = ActionGenerator._get_select_special_cards_actions(state, player)
+        if draft_actions:
+            return draft_actions  # Draft is the only legal action during this step
+
+        # 10. End turn (always available)
         actions.append(Action(
             action_type=ActionType.END_TURN,
             player_id=player_id
@@ -186,7 +197,7 @@ class ActionGenerator:
                 continue
 
             # Hot level from the dish itself
-            is_berbere = tile.dish == 'Berbere Misir'
+            is_berbere = tile.dish == 'Key Sir'
             hot_dish_level = 2 if is_berbere else 1 if tile.hot else 0
 
             adjacent_empty = ActionGenerator._get_adjacent_eatable_empty_tiles(state, player, tile.q, tile.r)
@@ -349,25 +360,15 @@ class ActionGenerator:
 
     @staticmethod
     def _get_add_tahini_actions(state: GameState, player: PlayerState) -> List[Action]:
-        """Get all possible add tahini actions"""
+        """Get all possible add tahini actions (unrestricted — any tile on the board)"""
         actions = []
-
         tahini_cards = [i for i, c in enumerate(player.hand) if c.name == 'Tahini']
-
         if len(tahini_cards) == 0:
             return actions
-
-        reachable_coords = state.get_reachable_tiles(player.player_id)
-
-        # For each reachable tile, find triangles where it can be the top
         for tile in state.board:
-            if tile.removed or tile.coord not in reachable_coords:
+            if tile.removed:
                 continue
-
-            # Find valid triangles with this tile as top (passing reachable_coords for validation)
-            triangles = ActionGenerator._find_triangles_with_top(state, tile, reachable_coords)
-
-            for orientation in triangles:
+            for orientation in ActionGenerator._find_triangles_with_top(state, tile):
                 actions.append(Action(
                     action_type=ActionType.ADD_TAHINI,
                     player_id=player.player_id,
@@ -375,46 +376,86 @@ class ActionGenerator:
                     tile_coord=tile.coord,
                     triangle_orientation=orientation
                 ))
-
         return actions
 
     @staticmethod
-    def _find_triangles_with_top(state: GameState, top_tile: TileState, reachable_coords: List[Tuple[int, int]]) -> List[str]:
+    def _get_add_hot_sauce_actions(state: GameState, player: PlayerState) -> List[Action]:
+        """Get all possible add hot sauce actions (unrestricted — any tile on the board)"""
+        actions = []
+        sauce_cards = [i for i, c in enumerate(player.hand) if c.name == 'Add Hot Sauce']
+        if len(sauce_cards) == 0:
+            return actions
+        for tile in state.board:
+            if tile.removed:
+                continue
+            for orientation in ActionGenerator._find_triangles_with_top(state, tile):
+                actions.append(Action(
+                    action_type=ActionType.ADD_HOT_SAUCE,
+                    player_id=player.player_id,
+                    card_index=sauce_cards[0],
+                    tile_coord=tile.coord,
+                    triangle_orientation=orientation
+                ))
+        return actions
+
+    @staticmethod
+    def _get_discard_redraw_actions(state: GameState, player: PlayerState) -> List[Action]:
+        """Get discard-all-and-draw-N-1 action (available whenever hand is non-empty)"""
+        if len(player.hand) == 0:
+            return []
+        return [Action(action_type=ActionType.DISCARD_REDRAW, player_id=player.player_id)]
+
+    @staticmethod
+    def _get_select_special_cards_actions(state: GameState, player: PlayerState) -> List[Action]:
+        """Generate all legal keep-2-from-3 draft choices.
+
+        Only active when state.draft_dealt_cards is non-empty (i.e. during a draft step).
+        Generates C(N, 2) actions where N = len(state.draft_dealt_cards).
+        If N <= 2 there is only one legal action (keep all dealt cards).
+        """
+        dealt = state.draft_dealt_cards
+        if not dealt:
+            return []
+
+        from itertools import combinations
+        actions = []
+        for kept in combinations(dealt, min(2, len(dealt))):
+            actions.append(Action(
+                action_type=ActionType.SELECT_SPECIAL_CARDS,
+                player_id=player.player_id,
+                dealt_card_ids=list(dealt),
+                kept_card_ids=list(kept),
+            ))
+        return actions
+
+    @staticmethod
+    def _find_triangles_with_top(state: GameState, top_tile: TileState) -> List[str]:
         """Find valid triangle orientations with this tile as the top"""
         orientations = []
         neighbors = ActionGenerator._get_neighbors(top_tile.q, top_tile.r)
 
-        # Check all pairs of neighbors to see if they form triangles
         for i in range(len(neighbors)):
             for j in range(i + 1, len(neighbors)):
                 n1_coord = neighbors[i]
                 n2_coord = neighbors[j]
 
-                # Check if both neighbors exist
                 n1 = state.get_tile(n1_coord[0], n1_coord[1])
                 n2 = state.get_tile(n2_coord[0], n2_coord[1])
 
                 if not n1 or not n2 or n1.removed or n2.removed:
                     continue
 
-                # IMPORTANT: Check if ALL tiles in triangle are reachable!
-                if n1_coord not in reachable_coords or n2_coord not in reachable_coords:
-                    continue
-
                 # Check if n1 and n2 are adjacent to each other
-                n1_neighbors = ActionGenerator._get_neighbors(n1_coord[0], n1_coord[1])
-                if n2_coord not in n1_neighbors:
+                if n2_coord not in ActionGenerator._get_neighbors(n1_coord[0], n1_coord[1]):
                     continue
 
-                # This is a valid triangle! Determine orientation
-                # Sort by r value to find top (smallest r = highest)
+                # Sort tiles to find the topmost (smallest r)
                 tiles = [(top_tile.q, top_tile.r), n1_coord, n2_coord]
                 sorted_tiles = sorted(tiles, key=lambda t: (t[1], t[0]))
 
                 if sorted_tiles[0] != (top_tile.q, top_tile.r):
                     continue  # This tile is not the top
 
-                # Check left vs right orientation
                 bottom1, bottom2 = sorted_tiles[1], sorted_tiles[2]
                 avg_q = (bottom1[0] + bottom2[0]) / 2
 

@@ -114,6 +114,10 @@ class GameEngine:
                 self._execute_add_tahini(player, action)
             elif action.action_type == ActionType.ADD_HOT_SAUCE:
                 self._execute_add_hot_sauce(player, action)
+            elif action.action_type == ActionType.DISCARD_REDRAW:
+                self._execute_discard_redraw(player, action)
+            elif action.action_type == ActionType.SELECT_SPECIAL_CARDS:
+                self._execute_select_special_cards(player, action, game_state)
             elif action.action_type == ActionType.END_TURN:
                 pass  # Handled by end_turn()
 
@@ -302,7 +306,7 @@ class GameEngine:
                 tile.tahini_tokens += 1
 
     def _execute_add_hot_sauce(self, player: Player, action: Action):
-        """Play a hot sauce card to add hotness tokens to a triangle of tiles, then draw 1 card"""
+        """Play a hot sauce card to add hotness tokens to a triangle of tiles"""
         if action.card_index is None or action.card_index >= len(player.hand):
             return
 
@@ -318,10 +322,24 @@ class GameEngine:
             if tile and not tile.is_removed:
                 tile.hot_sauce_tokens += 1
 
-        # Draw 1 card immediately
-        new_cards = self.deck.draw_multiple(1)
-        for c in new_cards:
-            player.draw_card(c)
+
+    def _execute_select_special_cards(self, player: Player, action: Action, game_state: GameState):
+        """Apply the draft selection: store kept cards on the player and clear draft state."""
+        from neural_ai.state_encoder import SPECIAL_CARD_NAME_TO_IDX
+        kept = action.kept_card_ids or []
+        player.special_cards = [
+            SPECIAL_CARD_NAME_TO_IDX[cid] for cid in kept if cid in SPECIAL_CARD_NAME_TO_IDX
+        ]
+        game_state.draft_dealt_cards = []  # Clear draft state
+
+    def _execute_discard_redraw(self, player: Player, action: Action):
+        """Discard entire hand and draw N-1 new cards"""
+        n = len(player.hand)
+        for card in list(player.hand):
+            self.deck.add_to_discard(card)
+        player.hand = []
+        new_cards = self.deck.draw_multiple(max(0, n - 1))
+        player.hand.extend(new_cards)
 
     # ==================== Drink Helpers ====================
 
@@ -598,10 +616,10 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
     Returns a list of bonus scores (one per player).
 
     Card indices (0-18) map to:
-    0: four_by_four, 1: tahini_freak, 2: sesame_intolerance, 3: tahini_queen,
-    4: tasting_menu, 5: picky_eater, 6: some_like_it_hot, 7: hot_monster,
-    8: berbere_freak, 9: no_hot_for_you, 10: peas_please, 11: peas_prince,
-    12: lentils_party, 13: lentils_princess, 14: savage_cabbage, 15: cabbage_king,
+    0: 4x4, 1: tahini_party, 2: sesame_intolerance, 3: tahini_queen,
+    4: tasting_menu, 5: picky_eater, 6: some_like_it_hot, 7: too_hot_to_handle,
+    8: beetroot_boss, 9: no_hot_for_you, 10: peas_please, 11: peas_prince,
+    12: lentils_freak, 13: lentils_princess, 14: cabbage_savage, 15: cabbage_king,
     16: healthy_appetite, 17: consolation_prize, 18: delicate_palate
     """
     bonuses = [0] * len(players)
@@ -638,19 +656,19 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
         for card_id in p.special_cards:
             pts = 0
 
-            if card_id == 0:  # four_by_four
+            if card_id == 0:  # 4x4
                 for count in s['dish_counts'].values():
                     if count == 4:
                         pts += 4
                 if s['num_types'] == 4:
                     pts += 4
 
-            elif card_id == 1:  # tahini_freak
+            elif card_id == 1:  # tahini_party
                 pts = s['tahini'] // 2
 
             elif card_id == 2:  # sesame_intolerance
-                if s['tahini'] == 0:
-                    pts = 8
+                if s['tahini'] == 0 or all(s['tahini'] < o['tahini'] for o in others):
+                    pts = 3 * (n - 1)
 
             elif card_id == 3:  # tahini_queen
                 if s['tahini'] > 0 and all(s['tahini'] > o['tahini'] for o in others):
@@ -663,21 +681,21 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
 
             elif card_id == 5:  # picky_eater
                 if s['num_types'] == 3:
-                    pts = 21
+                    pts = 15
 
             elif card_id == 6:  # some_like_it_hot
                 pts = s['total_hot'] // 2
 
-            elif card_id == 7:  # hot_monster
+            elif card_id == 7:  # too_hot_to_handle
                 if s['total_hot'] > 0 and all(s['total_hot'] > o['total_hot'] for o in others):
                     pts = 3 * (n - 1)
 
-            elif card_id == 8:  # berbere_freak
+            elif card_id == 8:  # beetroot_boss
                 pts = 2 * s['berbere']
 
             elif card_id == 9:  # no_hot_for_you
-                if all(s['total_hot'] < o['total_hot'] for o in others):
-                    pts = 4 * (n - 1)
+                if s['total_hot'] == 0 or all(s['total_hot'] < o['total_hot'] for o in others):
+                    pts = 3 * (n - 1)
 
             elif card_id == 10:  # peas_please
                 pts = s['peas']
@@ -686,14 +704,14 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
                 if s['peas'] > 0 and all(s['peas'] > o['peas'] for o in others):
                     pts = 2 * (n - 1)
 
-            elif card_id == 12:  # lentils_party
+            elif card_id == 12:  # lentils_freak
                 pts = s['lentils']
 
             elif card_id == 13:  # lentils_princess
                 if s['lentils'] > 0 and all(s['lentils'] > o['lentils'] for o in others):
                     pts = 2 * (n - 1)
 
-            elif card_id == 14:  # savage_cabbage
+            elif card_id == 14:  # cabbage_savage
                 pts = s['cabbage']
 
             elif card_id == 15:  # cabbage_king
@@ -706,7 +724,7 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
 
             elif card_id == 17:  # consolation_prize
                 if all(s['total_eaten'] < o['total_eaten'] for o in others):
-                    pts = 4 * (n - 1)
+                    pts = 3 * (n - 1)
 
             elif card_id == 18:  # delicate_palate
                 pts = (s['total_eaten'] - s['total_hot']) // 2
