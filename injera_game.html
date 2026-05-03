@@ -1081,23 +1081,57 @@ function ensureTokenCounters() {
             });
         }
 
+        function showEndGameModal(message) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 9999; padding: 20px; box-sizing: border-box;
+            `;
+            const box = document.createElement('div');
+            box.style.cssText = `
+                background: #fff; border-radius: 14px; padding: 28px 32px;
+                max-width: 560px; width: 100%; max-height: 85vh;
+                display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+            `;
+            const pre = document.createElement('pre');
+            pre.style.cssText = `
+                font-family: inherit; font-size: 14px; line-height: 1.7;
+                white-space: pre-wrap; overflow-y: auto; flex: 1;
+                margin: 0 0 20px 0; padding-right: 4px;
+            `;
+            pre.textContent = message;
+            const btn = document.createElement('button');
+            btn.textContent = '🎮 New Game';
+            btn.style.cssText = `
+                background: #d32f2f; color: #fff; border: none; border-radius: 8px;
+                padding: 12px 28px; font-size: 16px; font-weight: bold;
+                cursor: pointer; align-self: center; flex-shrink: 0;
+            `;
+            btn.onclick = () => location.reload();
+            box.appendChild(pre);
+            box.appendChild(btn);
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+        }
+
         function endGameNow() {
             if (!confirm('End the game now and calculate final scores?')) {
                 return;
             }
-            
+
             const results = calculateFinalScores();
             results.sort((a, b) => b.finalScore - a.finalScore);
-            
+
             let message = '🎉 GAME OVER! 🎉\n\n';
             message += 'FINAL SCORES:\n';
             message += '═══════════════════\n\n';
-            
+
             results.forEach((r, idx) => {
                 message += formatPlayerScore(r, idx);
             });
 
-            alert(message);
+            showEndGameModal(message);
             saveGameEnd(results);
         }
 
@@ -1164,7 +1198,7 @@ function ensureTokenCounters() {
                         message += 'FINAL SCORES:\n';
                         message += '═══════════════════\n\n';
                         results.forEach((r, idx) => { message += formatPlayerScore(r, idx); });
-                        alert(message);
+                        showEndGameModal(message);
                         saveGameEnd(results);
                         return;
                     }
@@ -1191,7 +1225,7 @@ function ensureTokenCounters() {
                     message += formatPlayerScore(r, idx);
                 });
 
-                alert(message);
+                showEndGameModal(message);
                 saveGameEnd(results);
                 return;
             }
