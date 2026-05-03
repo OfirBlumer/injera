@@ -2,7 +2,7 @@
 
 A hexagonal tile-eating board game inspired by Ethiopian cuisine, playable in your browser against a heuristic AI opponent.
 
-📖 **New to the game? Read the [full game rules (PDF)](injera_rules.pdf) before playing.**  
+📖 **New to the game? Read the [full game rules (PDF)](docs/injera_rules.pdf) before playing.**  
 🃏 **Printable cards and tiles for the physical version are in the [`docs/`](docs/) folder.**
 
 ---
