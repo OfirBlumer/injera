@@ -17,7 +17,7 @@
 // ==================== AI CONFIGURATION ====================
 
 const AI_CONFIG = {
-    serverUrl: 'http://localhost:5000',
+    serverUrl: '',
     enabled: true,
     autoPlay: true,  // Automatically play AI moves
     thinkingDelay: 800  // Delay in ms before AI makes move (for visualization)
