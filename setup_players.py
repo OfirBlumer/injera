@@ -82,23 +82,7 @@ def get_player_config():
             special_cards_config = None
             break
         elif sc_input in ['y', 'yes']:
-            while True:
-                try:
-                    deal_count = int(input("  How many cards to deal to each player (N)? [default: 3]: ").strip() or "3")
-                    if 1 <= deal_count <= 18:
-                        break
-                    print("  Please enter a number between 1 and 18.")
-                except ValueError:
-                    print("  Please enter a valid number.")
-            while True:
-                try:
-                    keep_count = int(input(f"  How many cards to keep (M)? (1-{deal_count}) [default: {deal_count}]: ").strip() or str(deal_count))
-                    if 1 <= keep_count <= deal_count:
-                        break
-                    print(f"  Please enter a number between 1 and {deal_count}.")
-                except ValueError:
-                    print("  Please enter a valid number.")
-            special_cards_config = {'deal': deal_count, 'keep': keep_count}
+            special_cards_config = {'deal': 3, 'keep': 2}
             break
         print("  Please enter 'y' or 'n'")
     print()

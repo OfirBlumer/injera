@@ -2,7 +2,8 @@
 
 A hexagonal tile-eating board game inspired by Ethiopian cuisine, playable in your browser against a heuristic AI opponent.
 
-📖 **New to the game? Read the [full game rules (PDF)](injera_rules.pdf) before playing.**
+📖 **New to the game? Read the [full game rules (PDF)](injera_rules.pdf) before playing.**  
+🃏 **Printable cards and tiles for the physical version are in the [`docs/`](docs/) folder.**
 
 ---
 
@@ -36,7 +37,7 @@ You will be asked:
 - **Number of players** (2–6)
 - **Name** for each player (or press Enter to accept the default)
 - **Human or AI** for each seat — enter `y` to make a seat AI-controlled
-- **Special cards** — optional secret objective cards dealt at game start (enter `y` to enable, then choose how many to deal and keep)
+- **Special cards** — optional secret objective cards; if enabled, each player is dealt 3 and keeps 2
 
 The script updates `injera_game.html` in place. You can re-run it any time to reconfigure.
 
