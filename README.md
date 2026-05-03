@@ -2,6 +2,8 @@
 
 A hexagonal tile-eating board game inspired by Ethiopian cuisine, playable in your browser against a heuristic AI opponent.
 
+📖 **New to the game? Read the [full game rules (PDF)](injera_rules.pdf) before playing.**
+
 ---
 
 ## Play Now (GitHub Codespaces)
@@ -14,12 +16,41 @@ Click the green **Code** button at the top of this repository, select the **Code
 
 > GitHub will spin up a cloud machine with all the files. This takes about 30–60 seconds.
 
-**Step 2 — Start the AI server**
+**Step 2 — Install dependencies**
 
 In the terminal that opens inside the Codespace, run:
 
 ```bash
 pip install -r requirements.txt
+```
+
+**Step 3 — Configure players**
+
+Run the interactive setup tool to choose how many players, their names, and which seats are controlled by the AI:
+
+```bash
+python setup_players.py
+```
+
+You will be asked:
+- **Number of players** (2–6)
+- **Name** for each player (or press Enter to accept the default)
+- **Human or AI** for each seat — enter `y` to make a seat AI-controlled
+- **Special cards** — optional secret objective cards dealt at game start (enter `y` to enable, then choose how many to deal and keep)
+
+The script updates `injera_game.html` in place. You can re-run it any time to reconfigure.
+
+> **Example:** 1 human + 1 AI, no special cards:
+> ```
+> How many players? 2
+> Player 1 — Name: Alice   Is AI? n
+> Player 2 — Name:         Is AI? y
+> Enable special cards? n
+> ```
+
+**Step 4 — Start the AI server**
+
+```bash
 python server.py
 ```
 
@@ -31,7 +62,7 @@ Server will run on: http://localhost:5000
 
 Leave this terminal running.
 
-**Step 3 — Open the game**
+**Step 5 — Open the game**
 
 In the file explorer on the left, right-click **`injera_game.html`** and choose **Open with Live Server** (or simply right-click → **Open in Browser**).
 
@@ -154,6 +185,7 @@ The full list of 19 secret cards is in [`docs/special_cards.txt`](docs/special_c
 git clone https://github.com/OfirBlumer/injera.git
 cd injera
 pip install -r requirements.txt
-python server.py          # keep running
+python setup_players.py   # configure players and AI seats
+python server.py          # keep this terminal running
 # open injera_game.html in your browser
 ```
