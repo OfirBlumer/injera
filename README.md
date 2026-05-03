@@ -65,9 +65,9 @@ Leave this terminal running.
 
 **Step 5 — Open the game**
 
-In the file explorer on the left, right-click **`injera_game.html`** and choose **Open with Live Server** (or simply right-click → **Open in Browser**).
+Once the server is running, Codespaces will show a pop-up saying **"Your application on port 5000 is available"** — click **Open in Browser**. If you miss it, go to the **Ports** tab (bottom panel), find port 5000, and click the globe icon.
 
-The game opens in a new browser tab. You are ready to play.
+The game loads directly from the server. You are ready to play.
 
 > **Note:** The first time an AI takes its turn it may pause briefly while the server warms up.
 
