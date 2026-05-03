@@ -25,6 +25,7 @@ const AI_CONFIG = {
 
 // State tracking
 let aiProcessing = false;
+let aiTurnGeneration = 0; // Incremented on undo; AI aborts if generation changes mid-flight
 
 // ==================== AI TURN HANDLING ====================
 
@@ -50,25 +51,33 @@ async function handleAITurnIfNeeded() {
 
 async function handleAITurn() {
     const currentPlayer = playersData[currentPlayerIdx];
+    const myGeneration = aiTurnGeneration; // snapshot; undo increments this
     aiProcessing = true;
     
-    // Show thinking indicator
-    const statusDiv = document.getElementById('gameStatus');
-    const originalHTML = statusDiv.innerHTML;
-    statusDiv.innerHTML = `<div class="ai-thinking">[AI] ${currentPlayer.name} is thinking...</div>${originalHTML}`;
-    
+    // Show thinking indicator as a temporary overlay
+    let thinkingEl = document.createElement('div');
+    thinkingEl.className = 'ai-thinking';
+    thinkingEl.style.cssText = 'position:fixed;top:10px;right:10px;background:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:9999;';
+    thinkingEl.textContent = `[AI] ${currentPlayer.name} is thinking…`;
+    document.body.appendChild(thinkingEl);
+
     try {
         // Prepare game state for AI
         const gameState = {
             num_players: numPlayers,
             current_player_idx: currentPlayerIdx,
             board: boardData,
-            players: playersData,
+            players: playersData.map((p, i) => ({
+                ...p,
+                waterRefilledThisTurn: waterRefilledThisTurn[i]
+            })),
             deck: deckData,
             reachable_by_player: reachableByPlayer,
             final_round_active: finalRoundActive,
             final_round_start_player: finalRoundStartPlayer,
-            game_over: false
+            game_over: false,
+            // Supply consecutive_no_eat_turns so the server can apply the critical-eating constraint
+            consecutive_no_eat_turns: (typeof noEatStreakTurns !== 'undefined') ? noEatStreakTurns : 0
         };
         
         // Call AI server
@@ -77,14 +86,15 @@ async function handleAITurn() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 game_state: gameState,
-                ai_level: currentPlayer.aiLevel || 'neural'
+                ai_level: currentPlayer.aiLevel || 'neural',
+                total_dishes_at_start: (typeof totalDishesAtStart !== 'undefined') ? totalDishesAtStart : 0
             })
         });
         
         if (!response.ok) {
             throw new Error(`AI server returned ${response.status}: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
         const action = data.action;
         
@@ -100,63 +110,68 @@ async function handleAITurn() {
             console.log('Total legal actions:', data.debug.total_legal_actions);
             console.log('Actions by type:', data.debug.actions_by_type);
             console.log('Chosen action:', data.debug.chosen_action);
-            if (data.debug.action_probabilities) {
-                console.log('Action probabilities (top 10):', data.debug.action_probabilities.slice(0, 10));
+            if (data.debug.top_actions) {
+                console.log('Top actions:', data.debug.top_actions);
             }
             console.log('===================');
         }
         
+        // Abort if undo happened while the server request was in flight
+        if (aiTurnGeneration !== myGeneration) { aiProcessing = false; return; }
+
         // Execute the AI's action
         await executeAIAction(action);
 
-        // Show what AI did (include debug info if available)
-        let alertMessage = `${data.message}\n\nClick OK to continue.`;
-        if (data.debug) {
-            alertMessage += `\n\n[DEBUG]\nActions: ${JSON.stringify(data.debug.actions_by_type)}\nChose: ${data.debug.chosen_action}`;
-            // Show action probabilities if available (neural AI only)
-            if (data.debug.action_probabilities && data.debug.action_probabilities.length > 0) {
-                alertMessage += `\n\nTop action probabilities:`;
-                const topActions = data.debug.action_probabilities.slice(0, 10);
-                for (const entry of topActions) {
-                    alertMessage += `\n  ${(entry.probability * 100).toFixed(1)}%  ${entry.action}`;
-                }
-                if (data.debug.action_probabilities.length > 10) {
-                    alertMessage += `\n  ... and ${data.debug.action_probabilities.length - 10} more`;
-                }
-            }
-        }
+        // Redraw the board immediately so the visual state reflects the action
+        // before the message panel appears (otherwise tiles appear unchanged).
+        if (typeof drawBoard === 'function') drawBoard();
+        if (typeof updatePlayersPanel === 'function') updatePlayersPanel();
 
         // Check if turn should end due to Coffee/Beer finished
         const shouldEndDueToDrinkFinished = window.aiShouldEndTurnAfterAction;
         if (shouldEndDueToDrinkFinished) {
             window.aiShouldEndTurnAfterAction = false;
-            alertMessage += '\n\nTurn ended - AI finished their drink!';
         }
 
-        alert(alertMessage);
+        const isTurnOver = action.action_type === 'end_turn' || shouldEndDueToDrinkFinished;
+
+        // Abort if undo happened during executeAIAction
+        if (aiTurnGeneration !== myGeneration) { aiProcessing = false; return; }
+
+        // Show AI action message and wait for user to click Continue
+        await new Promise(resolve => {
+            const panel = document.getElementById('aiMessagePanel');
+            if (!panel) { resolve(); return; }
+            const label = isTurnOver ? ' [turn ended]' : '';
+            // In clean mode show only the action description (first line); strip probabilities and plan
+            const displayMsg = window.cleanMode ? data.message.split('\n')[0] : data.message;
+            panel.innerHTML =
+                `<strong>[AI] ${playersData[currentPlayerIdx].name}${label}</strong>\n${displayMsg}\n` +
+                `<button style="margin-top:8px;padding:5px 14px;background:#667eea;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Continue ▶</button>`;
+            panel.style.display = 'block';
+            panel.querySelector('button').addEventListener('click', resolve, {once: true});
+        });
 
         // Restore status
-        statusDiv.innerHTML = originalHTML;
+        thinkingEl.remove();
         updateGameStatus();
 
-        // Check if AI chose to end turn OR if Coffee/Beer was finished
-        if (action.action_type === 'end_turn' || shouldEndDueToDrinkFinished) {
-            // AI is done - move to next player
+        if (isTurnOver) {
             setTimeout(() => {
                 aiProcessing = false;
                 nextTurn();
-            }, 500);
+            }, 300);
         } else {
             // AI wants to keep playing - take another action
             setTimeout(() => {
                 aiProcessing = false;
                 handleAITurn();
-            }, 500);
+            }, 300);
         }
         
     } catch (error) {
         console.error('AI Error:', error);
-        statusDiv.innerHTML = originalHTML;
+        thinkingEl.remove();
         alert(`[ERROR] AI Error: ${error.message}\n\nMake sure the AI server is running:\n  python server.py\n\nThen try again or play manually.`);
         aiProcessing = false;
     }
@@ -186,6 +201,12 @@ async function executeAIAction(action) {
         case 'add_tahini':
             executeAITahini(action);
             break;
+        case 'add_awaze':
+            executeAIAwaze(action);
+            break;
+        case 'discard_redraw':
+            executeAIDiscardRedraw(action);
+            break;
         case 'end_turn':
             // Just end turn
             break;
@@ -203,13 +224,14 @@ async function executeAIAction(action) {
 function findCardIndexByType(hand, discardType) {
     /**
      * Find the index of a card in hand matching the given discard type.
-     * discardType: 'Clean Injera', 'Rotate', 'Tahini', 'Coffee', 'Beer', or 'Water'
+     * discardType: 'Clean Injera', 'Rotate', 'Tahini', 'Awaze', 'Coffee', 'Beer', or 'Water'
      */
     for (let i = 0; i < hand.length; i++) {
         const c = hand[i];
         if (discardType === 'Clean Injera' && c.type === 'Clean Injera') return i;
         if (discardType === 'Rotate' && c.type === 'Rotate') return i;
         if (discardType === 'Tahini' && c.type === 'Tahini') return i;
+        if (['Awaze', 'Add Awaze'].includes(discardType) && c.type === 'Awaze') return i;
         if (['Coffee', 'Beer', 'Water'].includes(discardType) && c.type === 'Drink') {
             const drinkName = (c.name || '').replace('Order ', '');
             if (drinkName === discardType) return i;
@@ -270,6 +292,7 @@ async function executeAIEatDish(action) {
     currentPlayer.eaten.push(dishName);
     if (!currentPlayer.dishCounts) currentPlayer.dishCounts = {};
     currentPlayer.dishCounts[dishName] = (currentPlayer.dishCounts[dishName] || 0) + 1;
+    dishEatenThisTurn = true; // Reset stalemate counter in nextTurn()
 
     // Track tahini consumed
     if (tahiniValue > 0) {
@@ -280,27 +303,48 @@ async function executeAIEatDish(action) {
     const wasHot = tile.hot;
     const isBerbere = dishName === 'Key Sir';
 
-    // Track hot dish counts for special cards
+    // Track super-hot count (Key Sir only, mirroring human testEat)
     if (isBerbere) {
-        currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
-    } else if (dishName === 'Kik Alicha' || dishName === 'Misir Wot' || dishName === 'Tikel Gomen') {
+        currentPlayer.superHotCount = (currentPlayer.superHotCount || 0) + 1;
+    }
+
+    // Track hot/non-hot dish counts for special cards — exact mirror of HTML testEat logic
+    const isBerbereDish = isBerbere;
+    const dishInherentlyHot = (dishName === 'Kik Alicha' || dishName === 'Misir Wot' || dishName === 'Tikel Gomen' || isBerbereDish);
+    const dishCountsAsHot = dishInherentlyHot || (tile.awaze || 0) > 0;
+    if (dishCountsAsHot && !isBerbereDish) {
         currentPlayer.hotDishesEaten = (currentPlayer.hotDishesEaten || 0) + 1;
         currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
+    } else if (isBerbereDish) {
+        currentPlayer.totalHotEaten = (currentPlayer.totalHotEaten || 0) + 1;
+    } else {
+        currentPlayer.nonHotDishesEaten = (currentPlayer.nonHotDishesEaten || 0) + 1;
     }
-    let hotDishLevel = isBerbere ? 2 : (tile.hot ? 1 : 0);
-    let hotTileLevel = 0;
+    const dishFullHeat = (isBerbere ? 2 : (tile.hot ? 1 : 0)) + (tile.awaze || 0);
+    const dishTahini = tile.tahini || 0;
+    const hotDishLevel = Math.max(0, dishFullHeat - dishTahini);
+    const excessDishTahini = Math.max(0, dishTahini - dishFullHeat);
 
+    let hotTileLevel = 0;
+    let excessTileTahini = 0;
     if (action.resource_type === 'tile' && action.resource_tile_coord) {
         const emptyTile = boardData.find(t =>
             t.q === action.resource_tile_coord[0] && t.r === action.resource_tile_coord[1]);
         if (emptyTile && emptyTile.hotToken) {
             const isCenter = Math.abs(emptyTile.q) <= 1 && Math.abs(emptyTile.r) <= 1 &&
                             Math.abs(emptyTile.q + emptyTile.r) <= 1;
-            hotTileLevel = isCenter ? 2 : 1;
+            const rawTileHeat = isCenter ? 2 : 1;
+            const tileTahini = emptyTile.tahini || 0;
+            const tileFullHeat = rawTileHeat + (emptyTile.awaze || 0);
+            hotTileLevel = Math.max(0, tileFullHeat - tileTahini);
+            excessTileTahini = Math.max(0, tileTahini - tileFullHeat);
         }
     }
 
-    const totalHot = hotDishLevel + hotTileLevel;
+    // Cross-reduction: excess tahini from one tile cools the other's remaining heat
+    const adjDishHot = Math.max(0, hotDishLevel - excessTileTahini);
+    const adjTileHot = Math.max(0, hotTileLevel - excessDishTahini);
+    const totalHot = adjDishHot + adjTileHot;
     if (totalHot > 0) {
         handleAIHotByRecipe(currentPlayer, action.num_drink_tokens_for_hot || 0, totalHot);
     }
@@ -330,6 +374,7 @@ async function executeAIEatDish(action) {
     tile.empty = true;
     tile.dish = null;
     tile.tahini = 0;
+    tile.awaze = 0;
 
     if (wasHot || dishName === 'Key Sir') {
         tile.hotToken = true;
@@ -350,25 +395,26 @@ function handleAIHotByRecipe(currentPlayer, numDrinkTokens, totalHot) {
     /**
      * Handle hot using the exact recipe specified by the action.
      * Uses numDrinkTokens drink tokens first, then injera for the rest.
+     * Hand refills (Coffee/Water) are deferred until after injera discards.
      */
+    let deferredDrawTarget = null;
+
     // 1. Use the specified number of drink tokens
     for (let i = 0; i < numDrinkTokens; i++) {
         const activeDrink = currentPlayer.drinks.find(d => d.tokens > 0);
         if (activeDrink) {
             activeDrink.tokens--;
 
-            let points = 0;
-            if (activeDrink.type === 'Coffee') points = 1;
-            else if (activeDrink.type === 'Beer') points = 2;
-            currentPlayer.score += points;
-
             if (activeDrink.tokens === 0) {
                 const drinkIdx = currentPlayer.drinks.indexOf(activeDrink);
-                const result = handleDrinkFinished(currentPlayer, activeDrink.type);
+                const result = handleDrinkFinished(currentPlayer, activeDrink.type, true);
                 currentPlayer.drinks.splice(drinkIdx, 1);
                 console.log('AI finished drink:', activeDrink.type, result.message);
                 if (result.shouldEndTurn) {
                     window.aiShouldEndTurnAfterAction = true;
+                }
+                if (result.deferredDrawTarget != null) {
+                    deferredDrawTarget = Math.max(deferredDrawTarget ?? 0, result.deferredDrawTarget);
                 }
             }
         }
@@ -382,6 +428,12 @@ function handleAIHotByRecipe(currentPlayer, numDrinkTokens, totalHot) {
             currentPlayer.hand.splice(injeraIdx, 1);
             console.log('AI used injera for hot handling');
         }
+    }
+
+    // 3. Apply deferred hand refill AFTER injera discards
+    if (deferredDrawTarget !== null && !finalRoundActive) {
+        const toDraw = deferredDrawTarget - currentPlayer.hand.length;
+        if (toDraw > 0) drawCards(currentPlayer, toDraw);
     }
 }
 
@@ -401,11 +453,17 @@ async function executeAIEatEmptyTile(action) {
     }
 
     // 2. Handle hot using the exact recipe from the action
-    if (tile.hotToken) {
-        const isBerbereToken = Math.abs(tile.q) <= 1 && Math.abs(tile.r) <= 1 &&
-                              Math.abs(tile.q + tile.r) <= 1;
-        const hotLevel = isBerbereToken ? 2 : 1;
-        handleAIHotByRecipe(currentPlayer, action.num_drink_tokens_for_hot || 0, hotLevel);
+    {
+        const tileAwaze = tile.awaze || 0;
+        const tileTahini = tile.tahini || 0;
+        let rawHot = 0;
+        if (tile.hotToken) {
+            const isBerbereToken = Math.abs(tile.q) <= 1 && Math.abs(tile.r) <= 1 &&
+                                  Math.abs(tile.q + tile.r) <= 1;
+            rawHot = isBerbereToken ? 2 : 1;
+        }
+        const hotLevel = Math.max(0, rawHot + tileAwaze - tileTahini);
+        if (hotLevel > 0) handleAIHotByRecipe(currentPlayer, action.num_drink_tokens_for_hot || 0, hotLevel);
     }
 
     // 3. Award tahini points
@@ -415,7 +473,8 @@ async function executeAIEatEmptyTile(action) {
         currentPlayer.tahiniConsumed = (currentPlayer.tahiniConsumed || 0) + emptyTileTahini;
     }
 
-    // 4. Remove tile
+    // 4. Remove tile (EAT_EMPTY_TILE does NOT count as eating a dish —
+    //    the stalemate counter is not reset here)
     tile.removed = true;
     updateCanEatEmpty();
 }
@@ -441,10 +500,8 @@ function executeAIDrinkToken(action) {
     if (!drink) return;
     
     drink.tokens--;
-    
-    let points = 0;
-    if (drink.type === 'Coffee') points = 1;
-    else if (drink.type === 'Beer') points = 3;
+    // No points per voluntary token — finish bonus is awarded by handleDrinkFinished
+    const points = 0;
     currentPlayer.score += points;
     
     if (drink.tokens === 0) {
@@ -479,24 +536,103 @@ function executeAIRotate(action) {
     });
     
     updateCanEatEmpty();
+    calculateReachableTiles();
 }
 
 function executeAITahini(action) {
     const currentPlayer = playersData[currentPlayerIdx];
-    currentPlayer.hand.splice(action.card_index, 1);
-    
+
+    const cardIdx = currentPlayer.hand.findIndex(c => c.name === 'Tahini');
+    if (cardIdx < 0) { console.error('AI has no Tahini card'); return; }
+    currentPlayer.hand.splice(cardIdx, 1);
+
     const tile = boardData.find(t => t.q === action.tile_coord[0] && t.r === action.tile_coord[1]);
     if (!tile) return;
-    
-    // Find triangles and add tahini
-    const triangles = getTrianglesContaining(tile.q, tile.r);
-    if (triangles.length > 0) {
-        triangles[0].forEach(t => {
+
+    const allTriangles = getTrianglesContaining(tile.q, tile.r);
+    const orientation = action.triangle_orientation; // 'left' or 'right'
+
+    let chosen = null;
+    for (const tri of allTriangles) {
+        const sorted = [...tri].sort((a, b) => a.r !== b.r ? a.r - b.r : a.q - b.q);
+        const top = sorted[0];
+        if (top.q !== tile.q || top.r !== tile.r) continue;
+        const avgQ = (sorted[1].q + sorted[2].q) / 2;
+        const isLeft = avgQ < top.q;
+        if ((orientation === 'left' && isLeft) || (orientation === 'right' && !isLeft)) {
+            chosen = tri;
+            break;
+        }
+    }
+
+    if (!chosen) {
+        chosen = allTriangles[0];
+        console.warn('AI tahini: triangle orientation not found, using first available');
+    }
+
+    if (chosen) {
+        chosen.forEach(t => {
+            if (!t.removed) t.tahini = (t.tahini || 0) + 1;
+        });
+    }
+}
+
+function executeAIAwaze(action) {
+    const currentPlayer = playersData[currentPlayerIdx];
+
+    // Remove the Awaze card from hand
+    const cardIdx = currentPlayer.hand.findIndex(c => c.name === 'Add Awaze');
+    if (cardIdx < 0) {
+        console.error('AI has no Add Awaze card');
+        return;
+    }
+    currentPlayer.hand.splice(cardIdx, 1);
+
+    const tile = boardData.find(t => t.q === action.tile_coord[0] && t.r === action.tile_coord[1]);
+    if (!tile) return;
+
+    // Find all triangles with this tile as the top (smallest r)
+    const allTriangles = getTrianglesContaining(tile.q, tile.r);
+    const orientation = action.triangle_orientation; // 'left' or 'right'
+
+    let chosen = null;
+    for (const tri of allTriangles) {
+        const sorted = [...tri].sort((a, b) => a.r !== b.r ? a.r - b.r : a.q - b.q);
+        const top = sorted[0];
+        if (top.q !== tile.q || top.r !== tile.r) continue;
+        const avgQ = (sorted[1].q + sorted[2].q) / 2;
+        const isLeft = avgQ < top.q;
+        if ((orientation === 'left' && isLeft) || (orientation === 'right' && !isLeft)) {
+            chosen = tri;
+            break;
+        }
+    }
+
+    if (!chosen) {
+        // Fallback: use first available triangle
+        chosen = allTriangles[0];
+        console.warn('AI awaze: triangle orientation not found, using first available');
+    }
+
+    if (chosen) {
+        chosen.forEach(t => {
             if (!t.removed) {
-                t.tahini = (t.tahini || 0) + 1;
+                t.awaze = (t.awaze || 0) + 1;
             }
         });
     }
+
+}
+
+function executeAIDiscardRedraw(action) {
+    const currentPlayer = playersData[currentPlayerIdx];
+    const n = currentPlayer.hand.length;
+    if (n === 0) {
+        console.warn('AI discard_redraw: hand is empty');
+        return;
+    }
+    currentPlayer.hand = [];
+    if (n - 1 > 0) drawCards(currentPlayer, n - 1);
 }
 
 // ==================== HELPER: Update Player Panel to Show AI ====================
@@ -938,3 +1074,11 @@ console.log('   Start server with: python server.py');
 
 // Auto-start recording for every game
 recordingStart();
+
+// Tell the server to reset its per-session move counter (for temperature schedule)
+fetch(`${AI_CONFIG.serverUrl}/reset_session`, { method: 'POST' }).catch(() => {});
+
+// Cache dish count at game start for adaptive sim scaling (used in handleAITurn)
+if (typeof boardData !== 'undefined') {
+    window.totalDishesAtStart = boardData.filter(t => !t.empty && !t.removed).length;
+}

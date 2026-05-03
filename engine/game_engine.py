@@ -16,7 +16,7 @@ if str(project_root) not in sys.path:
 
 from injera_game import (
     Board, HexCoord, HexTile, DishType, CardType, DrinkType,
-    Deck, Card, InjeraCard, DrinkCard, TahiniCard, RotateCard, HotSauceCard,
+    Deck, Card, InjeraCard, DrinkCard, TahiniCard, RotateCard, AwazeCard,
     Player, ActiveDrink
 )
 from .game_state import (
@@ -30,9 +30,18 @@ class GameEngine:
 
     NUM_SPECIAL_CARDS = 18
 
-    def __init__(self, num_players: int, special_cards_per_player: int = 0):
+    def __init__(
+        self,
+        num_players: int,
+        special_cards_per_player: int = 0,
+        special_cards_draft_size: int = 0,
+    ):
         self.num_players = num_players
         self.special_cards_per_player = special_cards_per_player
+        # Draft mode: deal `special_cards_draft_size` cards, player picks 2.
+        # Takes precedence over special_cards_per_player when > 0.
+        self.special_cards_draft_size = special_cards_draft_size
+        self._pending_draft: dict = {}  # player_idx -> List[str] of card names
         self.board: Optional[Board] = None
         self.deck: Optional[Deck] = None
         self.players: Optional[List[Player]] = None
@@ -42,6 +51,8 @@ class GameEngine:
         self.game_over: bool = False
         self.force_end_turn: bool = False  # Set when Coffee or Beer finishes (or 2nd Water)
         self.water_refilled_this_turn: List[bool] = [False] * num_players
+        self.ate_this_turn: bool = False  # Reset each time a player's turn ends
+        self.consecutive_no_eat_turns: int = 0  # Increments each turn without eating
 
     def initialize_game(self) -> GameState:
         """Create a full game with real board, deck, and dealt hands"""
@@ -72,7 +83,18 @@ class GameEngine:
                 p.draw_card(c)
 
         # 5. Deal special cards
-        if self.special_cards_per_player > 0:
+        self._pending_draft = {}
+        if self.special_cards_draft_size > 0:
+            # Draft mode: deal N cards, each player picks 2 via SELECT_SPECIAL_CARDS action
+            from neural_ai.state_encoder import SPECIAL_CARD_IDX_TO_NAME
+            card_pool = list(range(self.NUM_SPECIAL_CARDS))
+            random.shuffle(card_pool)
+            for i, p in enumerate(self.players):
+                n = min(self.special_cards_draft_size, len(card_pool))
+                dealt_names = [SPECIAL_CARD_IDX_TO_NAME[idx] for idx in card_pool[:n]]
+                self._pending_draft[i] = dealt_names
+                card_pool = card_pool[n:]
+        elif self.special_cards_per_player > 0:
             card_pool = list(range(self.NUM_SPECIAL_CARDS))
             random.shuffle(card_pool)
             for p in self.players:
@@ -87,12 +109,125 @@ class GameEngine:
         self.game_over = False
         self.force_end_turn = False
         self.water_refilled_this_turn = [False] * self.num_players
+        self.ate_this_turn = False
+        self.consecutive_no_eat_turns = 0
 
         # 6. Build and return GameState
-        return self._build_game_state()
+        game_state = self._build_game_state()
+
+        # If draft mode: give player 0 their cards to choose from immediately
+        if self._pending_draft and 0 in self._pending_draft:
+            game_state.draft_dealt_cards = self._pending_draft.pop(0)
+
+        return game_state
+
+    def initialize_from_game_state(self, game_state: GameState):
+        """
+        Reconstruct internal engine state (board, players, deck) from an existing
+        GameState parsed from JSON. Used by the server so MCTS can simulate from
+        a mid-game position without having been present since game start.
+
+        The deck is reset to a fresh shuffle (unknown draw history), which is
+        acceptable for MCTS simulation — future card draws are uncertain anyway.
+        """
+        # ── Board ──────────────────────────────────────────────────────────
+        self.board = Board(radius=5)
+        for ts in game_state.board:
+            coord = HexCoord(ts.q, ts.r)
+            tile = self.board.get_tile(coord)
+            if tile is None:
+                continue
+            if ts.removed:
+                tile.is_removed = True
+                tile.has_injera = False
+                tile.dish_type = None
+            else:
+                if ts.dish:
+                    try:
+                        tile.dish_type = DishType(ts.dish)
+                    except ValueError:
+                        tile.dish_type = None
+                else:
+                    tile.dish_type = None
+                tile.is_hot       = ts.hot
+                tile.has_hot_token = ts.hot_token
+                tile.tahini_tokens = ts.tahini
+                tile.awaze_tokens  = getattr(ts, 'awaze', 0)
+
+        # ── Deck (fresh — exact state unknown) ────────────────────────────
+        self.deck = Deck()
+
+        # ── Players ───────────────────────────────────────────────────────
+        self.players = []
+        for ps in game_state.players:
+            p = Player(name=ps.name, position=ps.position)
+            p.score           = ps.score
+            p.base_hand_size  = ps.base_hand_size
+            p.tahini_consumed = ps.tahini_consumed
+            p.hot_dishes_eaten = ps.hot_dishes_eaten
+            p.total_hot_eaten  = ps.total_hot_eaten
+            p.special_cards    = list(ps.special_cards) if ps.special_cards else []
+
+            # Hand
+            p.hand = []
+            for cs in ps.hand:
+                card = self._card_from_card_state(cs)
+                if card is not None:
+                    p.hand.append(card)
+
+            # Active drinks
+            p.active_drinks = []
+            for ds in ps.drinks:
+                try:
+                    dt = DrinkType(ds.drink_type)
+                    p.active_drinks.append(ActiveDrink(drink_type=dt, tokens_remaining=ds.tokens))
+                except ValueError:
+                    pass
+
+            # Eaten dishes
+            p.eaten_dishes = []
+            for dish_name in ps.eaten:
+                try:
+                    p.eaten_dishes.append(DishType(dish_name))
+                except ValueError:
+                    pass
+
+            self.players.append(p)
+
+        # ── Metadata ──────────────────────────────────────────────────────
+        self.current_player_idx       = game_state.current_player_idx
+        self.final_round_active       = game_state.final_round_active
+        self.final_round_start_player = game_state.final_round_start_player
+        self.game_over                = game_state.game_over
+        self.consecutive_no_eat_turns = game_state.consecutive_no_eat_turns
+        self.ate_this_turn            = False
+        self.force_end_turn           = False
+        self.water_refilled_this_turn = [
+            ps.water_refilled_this_turn for ps in game_state.players
+        ]
+
+    @staticmethod
+    def _card_from_card_state(cs):
+        """Convert a CardState (from JSON) to the corresponding Card object."""
+        ct = cs.card_type
+        if ct == 'Clean Injera':
+            return InjeraCard()
+        elif ct == 'Rotate':
+            return RotateCard()
+        elif ct == 'Tahini':
+            return TahiniCard()
+        elif ct == 'Awaze':
+            return AwazeCard()
+        elif ct == 'Drink':
+            drink_name = (cs.name or '').replace('Order ', '')
+            try:
+                return DrinkCard(DrinkType(drink_name))
+            except ValueError:
+                return None
+        return None
 
     def is_game_over(self, game_state: GameState) -> bool:
-        return self.game_over
+        return self.game_over or self.consecutive_no_eat_turns >= self.num_players
 
     def execute_action(self, game_state: GameState, action: Action) -> bool:
         """Execute an action on internal game objects, then sync to GameState"""
@@ -102,6 +237,7 @@ class GameEngine:
 
             if action.action_type == ActionType.EAT_DISH:
                 self._execute_eat_dish(player, action)
+                self.ate_this_turn = True
             elif action.action_type == ActionType.EAT_EMPTY_TILE:
                 self._execute_eat_empty_tile(player, action)
             elif action.action_type == ActionType.PLAY_DRINK:
@@ -112,8 +248,8 @@ class GameEngine:
                 self._execute_play_rotate(player, action)
             elif action.action_type == ActionType.ADD_TAHINI:
                 self._execute_add_tahini(player, action)
-            elif action.action_type == ActionType.ADD_HOT_SAUCE:
-                self._execute_add_hot_sauce(player, action)
+            elif action.action_type == ActionType.ADD_AWAZE:
+                self._execute_add_awaze(player, action)
             elif action.action_type == ActionType.DISCARD_REDRAW:
                 self._execute_discard_redraw(player, action)
             elif action.action_type == ActionType.SELECT_SPECIAL_CARDS:
@@ -128,8 +264,15 @@ class GameEngine:
         except Exception as e:
             return False
 
-    def end_turn(self, game_state: GameState):
+    def end_turn(self, game_state: GameState, is_draft_turn: bool = False):
         """End current player's turn, refill their hand, then move to next player"""
+        if not is_draft_turn:
+            if self.ate_this_turn:
+                self.consecutive_no_eat_turns = 0
+            else:
+                self.consecutive_no_eat_turns += 1
+        self.ate_this_turn = False
+
         if not self.game_over:
             # Refill hand for the player who just finished their turn.
             # Beer penalty (if any) reduces the target by 1 this once.
@@ -189,7 +332,7 @@ class GameEngine:
             if empty_tile:
                 empty_tile_tahini = empty_tile.tahini_tokens
                 raw_hot = 2 if (empty_tile.has_hot_token and self._is_center_tile(empty_coord)) else (1 if empty_tile.has_hot_token else 0)
-                empty_tile_hot = max(0, raw_hot + empty_tile.hot_sauce_tokens - empty_tile.tahini_tokens)
+                empty_tile_hot = max(0, raw_hot + empty_tile.awaze_tokens - empty_tile.tahini_tokens)
                 empty_tile.use_injera()  # Remove the empty tile
 
         # 3. Calculate base value
@@ -202,7 +345,7 @@ class GameEngine:
 
         # 4. Handle hot using the specified recipe
         raw_dish_hot = 2 if dish_type == DishType.BERBERE_MISIR else (1 if tile.is_hot else 0)
-        dish_hot = max(0, raw_dish_hot + tile.hot_sauce_tokens - tile.tahini_tokens)
+        dish_hot = max(0, raw_dish_hot + tile.awaze_tokens - tile.tahini_tokens)
         total_hot = dish_hot + empty_tile_hot
         hot_points = self._handle_hot_by_recipe(
             player, action.num_drink_tokens_for_hot, total_hot, action.player_id
@@ -238,7 +381,7 @@ class GameEngine:
         # 2. Handle hot using the specified recipe
         hot_points = 0
         raw_hot_level = 2 if (tile.has_hot_token and self._is_center_tile(coord)) else (1 if tile.has_hot_token else 0)
-        hot_level = max(0, raw_hot_level + tile.hot_sauce_tokens - tile.tahini_tokens)
+        hot_level = max(0, raw_hot_level + tile.awaze_tokens - tile.tahini_tokens)
         if hot_level > 0:
             hot_points = self._handle_hot_by_recipe(
                 player, action.num_drink_tokens_for_hot, hot_level, action.player_id
@@ -305,8 +448,8 @@ class GameEngine:
             if tile and not tile.is_removed:
                 tile.tahini_tokens += 1
 
-    def _execute_add_hot_sauce(self, player: Player, action: Action):
-        """Play a hot sauce card to add hotness tokens to a triangle of tiles"""
+    def _execute_add_awaze(self, player: Player, action: Action):
+        """Play a awaze card to add hotness tokens to a triangle of tiles"""
         if action.card_index is None or action.card_index >= len(player.hand):
             return
 
@@ -320,7 +463,7 @@ class GameEngine:
         for tc in triangle_coords:
             tile = self.board.get_tile(tc)
             if tile and not tile.is_removed:
-                tile.hot_sauce_tokens += 1
+                tile.awaze_tokens += 1
 
 
     def _execute_select_special_cards(self, player: Player, action: Action, game_state: GameState):
@@ -331,6 +474,18 @@ class GameEngine:
             SPECIAL_CARD_NAME_TO_IDX[cid] for cid in kept if cid in SPECIAL_CARD_NAME_TO_IDX
         ]
         game_state.draft_dealt_cards = []  # Clear draft state
+
+        # Always advance to the next player after a draft selection.
+        # If another player has pending draft cards, set them up; otherwise
+        # force_end_turn wraps back to player 0 to start the actual game.
+        self.force_end_turn = True
+        if self._pending_draft:
+            next_idx = (self.current_player_idx + 1) % self.num_players
+            for _ in range(self.num_players):
+                if next_idx in self._pending_draft:
+                    game_state.draft_dealt_cards = self._pending_draft.pop(next_idx)
+                    break
+                next_idx = (next_idx + 1) % self.num_players
 
     def _execute_discard_redraw(self, player: Player, action: Action):
         """Discard entire hand and draw N-1 new cards"""
@@ -438,6 +593,8 @@ class GameEngine:
                 if c.card_type == CardType.DRINK and isinstance(c, DrinkCard):
                     if c.drink_type.value == discard_type:
                         return i
+            elif discard_type in ('Awaze', 'Add Awaze') and c.card_type == CardType.AWAZE:
+                return i
 
         return None
 
@@ -487,8 +644,8 @@ class GameEngine:
             return 'Rotate Injera'
         elif card.card_type == CardType.TAHINI:
             return 'Tahini'
-        elif card.card_type == CardType.HOT_SAUCE:
-            return 'Add Hot Sauce'
+        elif card.card_type == CardType.AWAZE:
+            return 'Add Awaze'
         elif card.card_type == CardType.DRINK:
             if isinstance(card, DrinkCard):
                 return f'Order {card.drink_type.value}'
@@ -510,7 +667,7 @@ class GameEngine:
                 hot=tile.is_hot,
                 hot_token=tile.has_hot_token,
                 tahini=tile.tahini_tokens,
-                hot_sauce=tile.hot_sauce_tokens,
+                awaze=tile.awaze_tokens,
                 empty=is_empty,
                 removed=tile.is_removed,
                 can_eat_empty=(self.board.can_eat_empty_tile(coord) if is_empty else False)
@@ -530,6 +687,8 @@ class GameEngine:
                     hand.append(CardState(card_type='Tahini', name='Tahini'))
                 elif c.card_type == CardType.ROTATE:
                     hand.append(CardState(card_type='Rotate', name='Rotate Injera'))
+                elif c.card_type == CardType.AWAZE:
+                    hand.append(CardState(card_type='Awaze', name='Add Awaze'))
 
             drinks = []
             for d in p.active_drinks:
@@ -593,7 +752,8 @@ class GameEngine:
             reachable_by_player=reachable,
             final_round_active=self.final_round_active,
             final_round_start_player=self.final_round_start_player,
-            game_over=self.game_over
+            game_over=self.game_over,
+            consecutive_no_eat_turns=self.consecutive_no_eat_turns,
         )
 
     def _sync_game_state(self, game_state: GameState):
@@ -608,6 +768,7 @@ class GameEngine:
         game_state.final_round_active = new.final_round_active
         game_state.final_round_start_player = new.final_round_start_player
         game_state.game_over = new.game_over
+        game_state.consecutive_no_eat_turns = new.consecutive_no_eat_turns
 
 
 def compute_special_card_scores(players: List[Player], num_players: int) -> List[int]:
@@ -668,11 +829,11 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
 
             elif card_id == 2:  # sesame_intolerance
                 if s['tahini'] == 0 or all(s['tahini'] < o['tahini'] for o in others):
-                    pts = 3 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 3:  # tahini_queen
                 if s['tahini'] > 0 and all(s['tahini'] > o['tahini'] for o in others):
-                    pts = 2 * (n - 1)
+                    pts = 2 * n
 
             elif card_id == 4:  # tasting_menu
                 if s['num_types'] == 5: pts = 5
@@ -688,43 +849,43 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
 
             elif card_id == 7:  # too_hot_to_handle
                 if s['total_hot'] > 0 and all(s['total_hot'] > o['total_hot'] for o in others):
-                    pts = 3 * (n - 1)
+                    pts = 2 * n
 
             elif card_id == 8:  # beetroot_boss
                 pts = 2 * s['berbere']
 
             elif card_id == 9:  # no_hot_for_you
                 if s['total_hot'] == 0 or all(s['total_hot'] < o['total_hot'] for o in others):
-                    pts = 3 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 10:  # peas_please
                 pts = s['peas']
 
             elif card_id == 11:  # peas_prince
                 if s['peas'] > 0 and all(s['peas'] > o['peas'] for o in others):
-                    pts = 2 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 12:  # lentils_freak
                 pts = s['lentils']
 
             elif card_id == 13:  # lentils_princess
                 if s['lentils'] > 0 and all(s['lentils'] > o['lentils'] for o in others):
-                    pts = 2 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 14:  # cabbage_savage
                 pts = s['cabbage']
 
             elif card_id == 15:  # cabbage_king
                 if s['cabbage'] > 0 and all(s['cabbage'] > o['cabbage'] for o in others):
-                    pts = 2 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 16:  # healthy_appetite
                 if s['total_eaten'] > 0 and all(s['total_eaten'] > o['total_eaten'] for o in others):
-                    pts = 2 * (n - 1)
+                    pts = 2 * n
 
             elif card_id == 17:  # consolation_prize
                 if all(s['total_eaten'] < o['total_eaten'] for o in others):
-                    pts = 3 * (n - 1)
+                    pts = 4 + n
 
             elif card_id == 18:  # delicate_palate
                 pts = (s['total_eaten'] - s['total_hot']) // 2
@@ -732,3 +893,83 @@ def compute_special_card_scores(players: List[Player], num_players: int) -> List
             bonuses[pi] += pts
 
     return bonuses
+
+
+SPECIAL_CARD_NAMES = {
+    0: '4x4', 1: 'tahini_party', 2: 'sesame_intolerance', 3: 'tahini_queen',
+    4: 'tasting_menu', 5: 'picky_eater', 6: 'some_like_it_hot', 7: 'too_hot_to_handle',
+    8: 'beetroot_boss', 9: 'no_hot_for_you', 10: 'peas_please', 11: 'peas_prince',
+    12: 'lentils_freak', 13: 'lentils_princess', 14: 'cabbage_savage', 15: 'cabbage_king',
+    16: 'healthy_appetite', 17: 'consolation_prize', 18: 'delicate_palate',
+}
+
+
+def compute_special_card_breakdown(players: List[Player], num_players: int) -> List[Dict[str, int]]:
+    """
+    Like compute_special_card_scores but returns per-player dicts of {card_name: pts}.
+    """
+    stats = []
+    for p in players:
+        dish_counts = {}
+        for d in p.eaten_dishes:
+            dish_counts[d] = dish_counts.get(d, 0) + 1
+        num_types = len(set(p.eaten_dishes))
+        peas    = dish_counts.get(DishType.SHIRO, 0) + dish_counts.get(DishType.KIK_ALICHA, 0)
+        lentils = dish_counts.get(DishType.MISIR_WOT, 0) + dish_counts.get(DishType.AZIFA, 0)
+        cabbage = dish_counts.get(DishType.GOMEN, 0) + dish_counts.get(DishType.TIKEL_GOMEN, 0)
+        stats.append({
+            'dish_counts': dish_counts, 'num_types': num_types,
+            'total_eaten': len(p.eaten_dishes), 'peas': peas, 'lentils': lentils,
+            'cabbage': cabbage, 'tahini': p.tahini_consumed,
+            'hot': p.hot_dishes_eaten, 'total_hot': p.total_hot_eaten,
+            'berbere': p.super_hot_eaten_count,
+        })
+
+    n = num_players
+    result = [{} for _ in players]
+
+    for pi, p in enumerate(players):
+        s = stats[pi]
+        others = [stats[j] for j in range(len(players)) if j != pi]
+
+        for card_id in p.special_cards:
+            pts = 0
+            if card_id == 0:
+                for count in s['dish_counts'].values():
+                    if count == 4: pts += 4
+                if s['num_types'] == 4: pts += 4
+            elif card_id == 1:  pts = s['tahini'] // 2
+            elif card_id == 2:
+                if s['tahini'] == 0 or all(s['tahini'] < o['tahini'] for o in others): pts = 4 + n
+            elif card_id == 3:
+                if s['tahini'] > 0 and all(s['tahini'] > o['tahini'] for o in others): pts = 2 * n
+            elif card_id == 4:
+                if s['num_types'] == 5: pts = 5
+                elif s['num_types'] == 6: pts = 6
+                elif s['num_types'] == 7: pts = 7
+            elif card_id == 5:
+                if s['num_types'] == 3: pts = 15
+            elif card_id == 6:  pts = s['total_hot'] // 2
+            elif card_id == 7:
+                if s['total_hot'] > 0 and all(s['total_hot'] > o['total_hot'] for o in others): pts = 2 * n
+            elif card_id == 8:  pts = 2 * s['berbere']
+            elif card_id == 9:
+                if s['total_hot'] == 0 or all(s['total_hot'] < o['total_hot'] for o in others): pts = 4 + n
+            elif card_id == 10: pts = s['peas']
+            elif card_id == 11:
+                if s['peas'] > 0 and all(s['peas'] > o['peas'] for o in others): pts = 4 + n
+            elif card_id == 12: pts = s['lentils']
+            elif card_id == 13:
+                if s['lentils'] > 0 and all(s['lentils'] > o['lentils'] for o in others): pts = 4 + n
+            elif card_id == 14: pts = s['cabbage']
+            elif card_id == 15:
+                if s['cabbage'] > 0 and all(s['cabbage'] > o['cabbage'] for o in others): pts = 4 + n
+            elif card_id == 16:
+                if s['total_eaten'] > 0 and all(s['total_eaten'] > o['total_eaten'] for o in others): pts = 2 * n
+            elif card_id == 17:
+                if all(s['total_eaten'] < o['total_eaten'] for o in others): pts = 4 + n
+            elif card_id == 18: pts = (s['total_eaten'] - s['total_hot']) // 2
+
+            result[pi][SPECIAL_CARD_NAMES.get(card_id, str(card_id))] = pts
+
+    return result
