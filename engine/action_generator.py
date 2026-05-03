@@ -44,8 +44,8 @@ class ActionGenerator:
         # 6. Add tahini actions (unrestricted — any tile on the board)
         actions.extend(ActionGenerator._get_add_tahini_actions(state, player))
 
-        # 7. Add hot sauce actions (unrestricted — any tile on the board)
-        actions.extend(ActionGenerator._get_add_hot_sauce_actions(state, player))
+        # 7. Add awaze actions (unrestricted — any tile on the board)
+        actions.extend(ActionGenerator._get_add_awaze_actions(state, player))
 
         # 8. Discard all & redraw N-1
         actions.extend(ActionGenerator._get_discard_redraw_actions(state, player))
@@ -77,7 +77,7 @@ class ActionGenerator:
 
     @staticmethod
     def _get_adjacent_eatable_empty_tiles(state: GameState, player: PlayerState, q: int, r: int) -> List[TileState]:
-        """Find adjacent empty tiles that can be eaten"""
+        """Find adjacent empty tiles that can be used as a resource for eating a dish."""
         neighbors = ActionGenerator._get_neighbors(q, r)
         eatable_empty = []
         reachable_coords = state.get_reachable_tiles(player.player_id)
@@ -85,7 +85,6 @@ class ActionGenerator:
         for nq, nr in neighbors:
             tile = state.get_tile(nq, nr)
             if tile and tile.empty and not tile.removed and tile.can_eat_empty:
-                # Check if reachable
                 if (nq, nr) in reachable_coords:
                     eatable_empty.append(tile)
 
@@ -196,9 +195,10 @@ class ActionGenerator:
             if tile.coord not in reachable_coords:
                 continue
 
-            # Hot level from the dish itself
+            # Hot level from the dish itself (berbere base + hot flag + awaze tokens - tahini)
             is_berbere = tile.dish == 'Key Sir'
-            hot_dish_level = 2 if is_berbere else 1 if tile.hot else 0
+            base_hot = 2 if is_berbere else 1 if tile.hot else 0
+            hot_dish_level = max(0, base_hot + getattr(tile, 'awaze', 0) - getattr(tile, 'tahini', 0))
 
             adjacent_empty = ActionGenerator._get_adjacent_eatable_empty_tiles(state, player, tile.q, tile.r)
 
@@ -215,14 +215,24 @@ class ActionGenerator:
 
             # Option B: Eat with each adjacent empty tile (resource_type='tile')
             # Costs: 0 injera for eating + injera for hot + 1 discard card
+            dish_full_heat = base_hot + getattr(tile, 'awaze', 0)
+            excess_dish_tahini = max(0, getattr(tile, 'tahini', 0) - dish_full_heat)
             for empty_tile in adjacent_empty:
                 empty_tile_hot = 0
+                excess_tile_tahini = 0
                 if empty_tile.hot_token:
                     is_berbere_token = (abs(empty_tile.q) <= 1 and abs(empty_tile.r) <= 1 and
                                       abs(empty_tile.q + empty_tile.r) <= 1)
-                    empty_tile_hot = 2 if is_berbere_token else 1
+                    raw_empty_hot = 2 if is_berbere_token else 1
+                    tile_tahini = getattr(empty_tile, 'tahini', 0)
+                    tile_full_heat = raw_empty_hot + getattr(empty_tile, 'awaze', 0)
+                    empty_tile_hot = max(0, tile_full_heat - tile_tahini)
+                    excess_tile_tahini = max(0, tile_tahini - tile_full_heat)
 
-                total_hot = hot_dish_level + empty_tile_hot
+                # Cross-reduction: excess tahini from one tile cools the other's remaining heat
+                adj_dish_hot = max(0, hot_dish_level - excess_tile_tahini)
+                adj_tile_hot = max(0, empty_tile_hot - excess_dish_tahini)
+                total_hot = adj_dish_hot + adj_tile_hot
                 actions.extend(ActionGenerator._enumerate_eat_sub_choices(
                     player, tile, 'tile', empty_tile.coord, total_hot,
                     injera_count, active_drink_tokens, injera_committed_base=0
@@ -256,12 +266,13 @@ class ActionGenerator:
             if tile.coord not in reachable_coords:
                 continue
 
-            # Hot level from hot token on the empty tile
-            hot_level = 0
+            # Hot level: hot_token contributes 1 or 2, awaze adds on top, tahini reduces
+            raw_hot = 0
             if tile.hot_token:
                 is_berbere_token = (abs(tile.q) <= 1 and abs(tile.r) <= 1 and
                                   abs(tile.q + tile.r) <= 1)
-                hot_level = 2 if is_berbere_token else 1
+                raw_hot = 2 if is_berbere_token else 1
+            hot_level = max(0, raw_hot + getattr(tile, 'awaze', 0) - getattr(tile, 'tahini', 0))
 
             # Enumerate (discard_card_type, num_drink_tokens_for_hot) combinations
             max_drink_tokens = min(hot_level, active_drink_tokens)
@@ -379,10 +390,10 @@ class ActionGenerator:
         return actions
 
     @staticmethod
-    def _get_add_hot_sauce_actions(state: GameState, player: PlayerState) -> List[Action]:
-        """Get all possible add hot sauce actions (unrestricted — any tile on the board)"""
+    def _get_add_awaze_actions(state: GameState, player: PlayerState) -> List[Action]:
+        """Get all possible add awaze actions (unrestricted — any tile on the board)"""
         actions = []
-        sauce_cards = [i for i, c in enumerate(player.hand) if c.name == 'Add Hot Sauce']
+        sauce_cards = [i for i, c in enumerate(player.hand) if c.name == 'Add Awaze']
         if len(sauce_cards) == 0:
             return actions
         for tile in state.board:
@@ -390,7 +401,7 @@ class ActionGenerator:
                 continue
             for orientation in ActionGenerator._find_triangles_with_top(state, tile):
                 actions.append(Action(
-                    action_type=ActionType.ADD_HOT_SAUCE,
+                    action_type=ActionType.ADD_AWAZE,
                     player_id=player.player_id,
                     card_index=sauce_cards[0],
                     tile_coord=tile.coord,

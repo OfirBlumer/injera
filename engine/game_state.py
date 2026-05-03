@@ -7,6 +7,25 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Set, Tuple
 from enum import Enum
 
+_SC_NAME_TO_ID: Dict[str, int] = {
+    '4x4': 0, 'tahini_party': 1, 'sesame_intolerance': 2, 'tahini_queen': 3,
+    'tasting_menu': 4, 'picky_eater': 5, 'some_like_it_hot': 6, 'too_hot_to_handle': 7,
+    'beetroot_boss': 8, 'no_hot_for_you': 9, 'peas_please': 10, 'peas_prince': 11,
+    'lentils_freak': 12, 'lentils_princess': 13, 'cabbage_savage': 14, 'cabbage_king': 15,
+    'healthy_appetite': 16, 'consolation_prize': 17, 'delicate_palate': 18,
+    # legacy aliases
+    'four_by_four': 0, 'tahini_freak': 1, 'hot_monster': 7,
+    'berbere_freak': 8, 'lentils_party': 12, 'savage_cabbage': 14,
+}
+
+def _parse_special_card(c) -> int:
+    """Normalise a special card value (dict, string name, or int) to an integer ID."""
+    if isinstance(c, dict):
+        c = c.get('id', c.get('card_id', c))
+    if isinstance(c, str):
+        return _SC_NAME_TO_ID.get(c, -1)
+    return int(c)
+
 
 class ActionType(Enum):
     """All possible action types in the game"""
@@ -16,7 +35,7 @@ class ActionType(Enum):
     DRINK_TOKEN = "drink_token"
     PLAY_ROTATE = "play_rotate"
     ADD_TAHINI = "add_tahini"
-    ADD_HOT_SAUCE = "add_hot_sauce"
+    ADD_AWAZE = "add_awaze"
     END_TURN = "end_turn"
     DISCARD_REDRAW = "discard_redraw"
     SELECT_SPECIAL_CARDS = "select_special_cards"
@@ -120,7 +139,7 @@ class TileState:
     hot: bool = False
     hot_token: bool = False
     tahini: int = 0
-    hot_sauce: int = 0
+    awaze: int = 0
     empty: bool = False
     removed: bool = False
     can_eat_empty: bool = False
@@ -219,6 +238,7 @@ class GameState:
     winner_id: Optional[int] = None
     # Cards dealt to current player during the draft phase (empty outside draft)
     draft_dealt_cards: List[str] = field(default_factory=list)
+    consecutive_no_eat_turns: int = 0
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -260,6 +280,7 @@ class GameState:
             'game_over': self.game_over,
             'winner_id': self.winner_id,
             'draft_dealt_cards': self.draft_dealt_cards,
+            'consecutive_no_eat_turns': self.consecutive_no_eat_turns,
         }
     
     @classmethod
@@ -275,7 +296,7 @@ class GameState:
                 'hot': tile_data.get('hot', False),
                 'hot_token': tile_data.get('hotToken', False),  # camelCase -> snake_case
                 'tahini': tile_data.get('tahini', 0),
-                'hot_sauce': tile_data.get('hotSauce', 0),
+                'awaze': tile_data.get('awaze', 0),
                 'empty': tile_data.get('empty', False),
                 'removed': tile_data.get('removed', False),
                 'can_eat_empty': tile_data.get('canEatEmpty', False)  # camelCase -> snake_case
@@ -301,7 +322,10 @@ class GameState:
                 water_refilled_this_turn=p_data.get('waterRefilledThisTurn', p_data.get('water_refilled_this_turn', False)),
                 is_ai=p_data.get('isAI', p_data.get('is_ai', False)),
                 ai_level=p_data.get('aiLevel', p_data.get('ai_level')),
-                special_cards=p_data.get('specialCards', p_data.get('special_cards', [])),
+                special_cards=[sc for sc in (
+                               _parse_special_card(c)
+                               for c in p_data.get('specialCards', p_data.get('special_cards', [])))
+                               if sc >= 0],
                 tahini_consumed=p_data.get('tahiniConsumed', p_data.get('tahini_consumed', 0)),
                 hot_dishes_eaten=p_data.get('hotDishesEaten', p_data.get('hot_dishes_eaten', 0)),
                 total_hot_eaten=p_data.get('totalHotEaten', p_data.get('total_hot_eaten', 0))
@@ -336,6 +360,7 @@ class GameState:
             game_over=data.get('game_over', False),
             winner_id=data.get('winner_id'),
             draft_dealt_cards=data.get('draft_dealt_cards', []),
+            consecutive_no_eat_turns=data.get('consecutive_no_eat_turns', 0),
         )
     
     def get_current_player(self) -> PlayerState:

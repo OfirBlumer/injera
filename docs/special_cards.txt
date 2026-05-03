@@ -4,11 +4,11 @@
 2. "Tahini party":
     +1 point for each two tahini tokens you consumed.
 3. "Sesame intolerance":
-    +3*(number_of_players-1) points if you consumed less tahini tokens
-    than any other player, or consumed no tahini at all.
+    +(4+N) points if you consumed less tahini tokens than any other player,
+    or consumed no tahini at all. (N = number of players)
 4. "Tahini queen":
-    +2*(number_of_players-1) points if you consumed more tahini tokens 
-    than any other player.
+    +2*N points if you consumed more tahini tokens than any other player.
+    (N = number of players)
 5. "Tasting menu":
     +5 points if you tasted exactly 5 dish types.
     +6 points if you tasted exactly 6 dish types.
@@ -19,31 +19,31 @@
 7. "Some like it hot":
     +1 for each 2 hot dish tile consumed.
 8. "Too hot to handle":
-    +3*(number_of_players-1) points if you consumed more hot dish tiles 
-    than any other player, including extra-hot berbere.
+    +2*N points if you consumed more hot dish tiles than any other player,
+    including extra-hot berbere. (N = number of players)
 9. "Beetroot boss":
     +2 points for each key sir tile consumed.
 10. "No hot for you!":
-    +3*(number_of_players-1) points if you consumed no hot dish tiles,
-    or fewer hot dish tiles than every other player.
+    +(4+N) points if you consumed no hot dish tiles, or fewer hot dish
+    tiles than every other player. (N = number of players)
 11. "Peas please":
     +1 point for every dish tile consumed containing peas (Shiro and Kik Alicha)
 12. "Peas prince":
-    +2*(number_of_players-1) points if you consumed more tiles with peas
-    (Shiro and Kik Alicha) than any other player.
+    +(4+N) points if you consumed more tiles with peas (Shiro and Kik Alicha)
+    than any other player. (N = number of players)
 13. "lentils freak":
     +1 point for every dish tile consumed containing lentils (Misir Wot and Azifa).
 14. "lentils princess":
-    +2*(number_of_players-1) points if you consumed more tiles with lentils
-    (Misir Wot and Azifa) than any other player.
+    +(4+N) points if you consumed more tiles with lentils (Misir Wot and Azifa)
+    than any other player. (N = number of players)
 15. "Cabbage savage":
     +1 point for every dish tile consumed containing cabbage (Gomen and Tikel Gomen).
 16. "Cabbage king":
-    +2*(number_of_players-1) points if you consumed more tiles with cabbage
-    (Gomen and Tikel Gomen) than any other player.
+    +(4+N) points if you consumed more tiles with cabbage (Gomen and Tikel Gomen)
+    than any other player. (N = number of players)
 17: "Healthy appetite":
-    +2*(number_of_players-1) if you ate more dish tiles than any other player.
+    +2*N if you ate more dish tiles than any other player. (N = number of players)
 18: "Consolation prize":
-    +3*(number_of_players-1) if you ate less dish tiles than any other player.
+    +(4+N) if you ate fewer dish tiles than any other player. (N = number of players)
 19: "Delicate palate":
     +1 for each 2 non-hot dish tile consumed.

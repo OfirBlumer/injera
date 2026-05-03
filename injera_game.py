@@ -46,7 +46,7 @@ class CardType(Enum):
     DRINK = "Drink"
     TAHINI = "Tahini"
     ROTATE = "Rotate"
-    HOT_SAUCE = "Hot Sauce"
+    AWAZE = "Awaze"
 
 
 class DrinkType(Enum):
@@ -94,7 +94,7 @@ class HexTile:
     has_injera: bool = True
     dish_type: Optional[DishType] = None
     tahini_tokens: int = 0
-    hot_sauce_tokens: int = 0
+    awaze_tokens: int = 0
     is_hot: bool = False  # Whether the dish is hot
     has_hot_token: bool = False  # Hot token left after eating hot dish
     is_removed: bool = False  # Tile completely removed from board
@@ -119,9 +119,10 @@ class HexTile:
         was_hot = self.is_hot
         self.dish_type = None
         self.is_hot = False
+        self.tahini_tokens = 0  # Tahini was already collected as points when eating
         if was_hot:
             self.has_hot_token = True  # Hot token stays on empty tile
-        self.hot_sauce_tokens = 0  # Hot sauce does not carry over to revealed empty tile
+        self.awaze_tokens = 0  # Hot sauce does not carry over to revealed empty tile
         return dish
     
     def use_injera(self):
@@ -448,10 +449,10 @@ class RotateCard(Card):
 
 
 @dataclass
-class HotSauceCard(Card):
-    """Hot sauce card to add hotness tokens to tiles"""
+class AwazeCard(Card):
+    """Awaze card to add hotness tokens to tiles"""
     def __init__(self):
-        super().__init__(CardType.HOT_SAUCE, "Add Hot Sauce")
+        super().__init__(CardType.AWAZE, "Add Awaze")
 
 
 # ============================================================================
@@ -472,9 +473,9 @@ class Deck:
         for _ in range(30):
             self.cards.append(InjeraCard())
 
-        # 5 Hot Sauce cards
+        # 5 Awaze cards
         for _ in range(5):
-            self.cards.append(HotSauceCard())
+            self.cards.append(AwazeCard())
         
         # 3 of each drink type (3 tokens each)
         for _ in range(3):
@@ -569,6 +570,16 @@ class Player:
     hot_dishes_eaten: int = 0  # Hot dish tiles eaten (not berbere)
     total_hot_eaten: int = 0  # All hot dishes including berbere
     special_cards: List[int] = field(default_factory=list)  # Card indices (0-17) held
+
+    # Score breakdown tracking (updated inline)
+    pts_non_hot:    int = 0
+    pts_regular_hot: int = 0
+    pts_extra_hot:  int = 0
+    pts_coffee:     int = 0
+    pts_beer:       int = 0
+    pts_tahini:     int = 0
+    pts_completion: int = 0
+    pts_variety:    int = 0
     
     @property
     def max_hand_size(self) -> int:
@@ -616,8 +627,10 @@ class Player:
                 cards_drawn = 0
                 if drink.drink_type == DrinkType.COFFEE:
                     points = 1
+                    self.pts_coffee += 1
                 elif drink.drink_type == DrinkType.BEER:
                     points = 2
+                    self.pts_beer += 2
                 # Water gives 0 points
                 
                 # Check if drink is now finished
@@ -650,36 +663,68 @@ class Player:
         # Calculate base points
         points = base_value + tahini_tokens
 
-        # Track tahini consumed
+        # Track tahini consumed and points
         if tahini_tokens > 0:
             self.tahini_consumed += tahini_tokens
+            self.pts_tahini += tahini_tokens
 
-        # Track super-hot progression
+        # Track super-hot progression and base points
         if dish_type == DishType.BERBERE_MISIR:
             self.super_hot_eaten_count += 1
             self.total_hot_eaten += 1
+            self.pts_extra_hot += base_value
         elif dish_type in DishType.get_medium_hot():
             self.hot_dishes_eaten += 1
             self.total_hot_eaten += 1
+            self.pts_regular_hot += base_value
+        else:
+            self.pts_non_hot += base_value
+
+        # Track unique types before adding this dish
+        unique_before = len(set(self.eaten_dishes))
 
         # Add to eaten list
         self.eaten_dishes.append(dish_type)
 
-        # Check for completion bonus: +15 if all 7 tiles of one non-hot dish eaten
+        # Completion bonus: 5/10/15 points at 5/6/7 tiles of a non-hot dish
+        # Each threshold awards an incremental +5 (total: 5 at 5, 10 at 6, 15 at 7)
         if dish_type in DishType.get_non_hot():
-            if self.count_dish_type(dish_type) == 7:
-                points += 15
+            count = self.count_dish_type(dish_type)
+            if count in (5, 6, 7):
+                points += 5
+                self.pts_completion += 5
+
+        # Variety bonus: awarded when crossing 5/6/7 unique dish type thresholds
+        # Incremental bonuses: +5 at 5th type, +7 at 6th type, +9 at 7th type
+        # (totals: 5, 12, 21)
+        unique_after = len(set(self.eaten_dishes))
+        if unique_after > unique_before:
+            if unique_after == 5:
+                points += 5
+                self.pts_variety += 5
+            elif unique_after == 6:
+                points += 7
+                self.pts_variety += 7
+            elif unique_after == 7:
+                points += 9
+                self.pts_variety += 9
 
         self.score += points
         return points
-    
+
     def get_variety_bonus(self) -> int:
         """
-        Calculate variety bonus: 2 points per unique dish type eaten.
-        This is calculated at the end of the game.
+        Calculate variety bonus total: 5/12/21 points for 5/6/7 unique dish types.
+        For reporting purposes only — bonuses are already applied inline in eat_dish().
         """
         unique_types = len(set(self.eaten_dishes))
-        return 2 * unique_types
+        if unique_types >= 7:
+            return 21
+        elif unique_types >= 6:
+            return 12
+        elif unique_types >= 5:
+            return 5
+        return 0
     
     def show_hand(self) -> str:
         """Display player's hand"""
