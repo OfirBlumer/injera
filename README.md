@@ -143,6 +143,8 @@ When the last dish tile is eaten, a **final round** begins — every player gets
 
 Final scores include base points, completion bonuses, variety bonus, and secret card bonuses.
 
+Use **↩️ Undo** to reverse your last action, and **🎮 New Game** to restart.
+
 ---
 
 ## Secret Cards
@@ -157,18 +159,6 @@ At the start of the game each player is dealt 3 secret objective cards and keeps
 - **Healthy Appetite** — bonus for eating more dishes than everyone else
 
 The full list of 19 secret cards is in [`docs/special_cards.txt`](docs/special_cards.txt).
-
----
-
-## Controls
-
-| Action | How |
-|---|---|
-| Eat a dish | Click a green-outlined dish tile, then click **Eat Dish 🍴** |
-| Play a card | Click a card in your hand panel |
-| End your turn | Click **Next Turn ▶️** |
-| Undo last action | Click **↩️ Undo** |
-| New game | Click **🎮 New Game** |
 
 ---
 
