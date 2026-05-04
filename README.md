@@ -73,77 +73,75 @@ The game loads directly from the server. You are ready to play.
 
 ---
 
-## The Game
+## Gameplay
 
-Injera is a board game for 2–6 players set on a hexagonal grid covered with Ethiopian dishes. Players move across the board eating dishes to score points, managing a hand of cards and drink tokens to handle hot food.
+The board is a hex grid of dish tiles. Each player sits at a vertex and can reach the tiles in their sector (highlighted in green). On your turn you may take one or more actions, then click **Next Turn**.
 
-### Goal
+### Actions
 
-Score the most points when all dishes are eaten or when no player can eat for a full round.
+**Eat Dish**  
+Select a reachable dish tile and click **Eat Dish**. You must:
+1. Discard one card from your hand
+2. Provide a resource — either spend a Clean Injera card, or consume an adjacent reachable empty tile
+3. If the dish is hot, cover its heat level with drink tokens and/or Clean Injera cards (`tokens + injera cards ≥ heat level`)
 
-### The Board
+Each dish tile scores points equal to its base value plus any tahini tokens on it (+1 per token). If you used an empty tile as resource, its tahini tokens score too.
 
-The board is a hex grid with dish tiles arranged in concentric rings. Each tile shows a dish — some are hot 🔥, some extra-hot (Berbere 🔥🔥), and some tiles are empty. Your reachable tiles are highlighted in green.
-
-### Dishes and Points
-
-| Dish | Points | Hot? |
+| Dish | Points | Heat |
 |---|---|---|
-| Gomen (collard greens) | 1 | — |
-| Azifa (lentil salad) | 1 | — |
-| Shiro (chickpea stew) | 2 | — |
-| Kik Alicha (split peas) | 2 | 🔥 |
-| Misir Wot (red lentils) | 2 | 🔥 |
-| Tikel Gomen (cabbage) | 2 | 🔥 |
-| Key Sir (beetroot) | 3 | 🔥🔥 Berbere |
+| Gomen, Azifa, Shiro | 1 | — |
+| Kik Alicha, Misir Wot, Tikel Gomen | 2 | 🔥 (level 1) |
+| Key Sir | 3 | 🔥🔥 Berbere (level 2) |
 
-Eating 7 of the same dish earns a **+7 completion bonus**.  
-Eating at least one of every dish type earns a **+4 variety bonus**.
+Heat level = base heat + awaze tokens on the tile − tahini tokens on the tile.
 
-### Your Hand
+Eating 5/6/7 tiles of the same dish type earns a completion bonus (+5/+10/+15). Eating 5/6/7 distinct dish types earns a variety bonus (+5/+12/+21).
 
-You hold a hand of cards (default size 4). Each time you eat a dish you must **discard one card** from your hand first. Card types:
+---
 
-- **Clean Injera** — used to pay for hotness (1 card = absorb 1 heat level), or as the resource tile when eating
-- **Rotate** — rotate a ring of the board clockwise, repositioning dishes
-- **Tahini** — place a tahini token on a tile, reducing its heat and adding +1 point when that tile is eaten
-- **Beer / Coffee / Water** — drink cards that give you token-based heat protection for several turns
+**Eat Empty Tile**  
+Select a reachable empty tile and click **Eat Empty Tile**. No card is required. You score any tahini tokens on that tile. This does **not** count as eating a dish.
 
-### Eating a Dish
+---
 
-To eat a dish you must:
+**Order Drink**  
+Play a Beer, Coffee, or Water card from your hand to fill a cup with 3 tokens. The cup stays active across turns. When the last token is consumed:
+- **Beer** — +6 pts, your next hand refill at end-of-turn draws one fewer card. Turn ends.
+- **Coffee** — +3 pts, your hand refills to max+1 immediately. Turn ends.
+- **Water** — hand refills to max immediately. Turn continues (if it runs dry a second time in the same turn, turn ends instead).
 
-1. Select a reachable tile with a dish
-2. **Discard** one card from your hand
-3. Provide a **resource** — either spend an Injera card or consume an adjacent empty tile
-4. If the dish is hot, cover the remaining heat with **drink tokens** and/or **Injera cards**
+---
 
-### Hotness
+**Drink Token**  
+Consume one token from one of your active cups. Tokens are mainly used during eating to absorb dish heat, but can also be consumed as a standalone action.
 
-Each hot dish has an effective heat level (base heat + awaze tokens − tahini tokens):
+---
 
-- **Regular hot (🔥):** heat level 1
-- **Berbere / Key Sir (🔥🔥):** heat level 2
+**Add Tahini**  
+Play a Tahini card and select a tile as the apex of a triangle. Adds +1 tahini token to all 3 tiles in the chosen triangle. Tahini reduces a tile's heat level and scores +1 point per token when that tile is eventually eaten.
 
-To eat it you need: `drink tokens + injera cards ≥ effective heat level`
+---
 
-Drink tokens refill every few turns; Injera cards are a limited shared resource.
+**Add Awaze**  
+Play an Awaze card and select a tile as the apex of a triangle. Adds +1 awaze token to all 3 tiles, increasing each tile's heat level by 1.
 
-### Drinks
+---
 
-Playing a Beer, Coffee, or Water card gives you a drink with several tokens. Each token can absorb one level of heat per turn. When a drink runs dry your turn ends immediately.
+**Play Rotate Card**  
+Play a Rotate card to rotate one ring of the board clockwise or counter-clockwise, repositioning dishes and empty tiles.
 
-### Empty Tiles
+---
 
-Empty tiles can be consumed as a resource instead of an Injera card. They may carry **tahini** (reduces heat, scores bonus points) or be hot themselves, which adds to the heat you must handle.
+**Discard All & Draw N−1**  
+Discard your entire hand and draw one fewer card than you discarded. Useful when you have no usable cards.
+
+---
 
 ### End of Game
 
-The game ends when:
-- All dish tiles are eaten, **or**
-- A full round passes with nobody eating a single dish
+When the last dish tile is eaten, a **final round** begins — every player gets one more turn starting from the player who triggered it. The game also ends immediately if a full round passes with no dish eaten by anyone.
 
-Scores are totalled including variety bonus, completion bonus, and secret card bonuses.
+Final scores include base points, completion bonuses, variety bonus, and secret card bonuses.
 
 ---
 
